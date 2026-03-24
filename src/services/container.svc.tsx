@@ -47,7 +47,7 @@ export const sendRequest = (
     connectorMethod,
     params
   });
-
+// sample
   return new Promise((resolve, reject) => {
 
     if (!container || !container.connectors) {

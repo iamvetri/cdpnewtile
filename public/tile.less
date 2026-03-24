@@ -199,6 +199,36 @@ ons-toast {
   }
 }
 
+#home .cdp_page_container.home-page-scroll {
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  max-height: calc(100vh - 100px);
+  min-height: 200px;
+}
+
+#home .cdp_page_container {
+
+  .card {
+      background: #FFFFFF;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+      margin-bottom: 16px;
+      padding: 16px;
+    }
+    .account-card {
+      background: #F5F7FA;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 8px;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+  }
+
+
 .cdp_page_container {
   background-color: @backgroundGrey;
   

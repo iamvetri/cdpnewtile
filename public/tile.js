@@ -1,5 +1,7 @@
-/* eslint-disable no-var */
 var localHost = location.hostname === "localhost";
+
+// 🔥 FIX: get container from window
+var container = window.container;
 
 var tile = {
   data: {},
@@ -9,102 +11,71 @@ var tile = {
   getNav: function () {
     return document.getElementById("AppNavigator");
   },
+
   popPanel: function () {
-    consolelog("popPanel");
-    tile.getNav().popPage();
-  },
-  resetStack: function () {
-    tile.getNav().resetPage();
-  },
-  dollarify: function (price) {
-    if (price) {
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 2
-      }).format(price);
+    console.log("⬅️ popPanel");
+    const nav = tile.getNav();
+    if (nav && nav.popPage) {
+      nav.popPage();
     } else {
-      return null;
+      console.warn("Navigator not ready");
     }
   },
-  stickyHeaderInit: function (pageName) {
-    var $stickies;
 
-    var stickies = $("#" + pageName + " .sticky");
-    // console.log(stickies);
+  sendRequest: function (connectorName, connectorVersion, connectorMethod, params = {}) {
 
-    if (stickies.length > 0) {
-      // console.log("sticky length greater than zero")
-      $stickies = stickies.each(function () {
+    return new Promise(function (resolve, reject) {
 
-        let $thisSticky;
+      if (!container || !container.connectors) {
+        console.error("❌ CDP container not available");
+        reject({
+          success: false,
+          message: "CDP container not available"
+        });
+        return;
+      }
 
-        if (!$(this).parent().hasClass("followWrap")) {
-          $thisSticky = $(this).wrap('<div class="followWrap" />');
-        } else {
-          // console.log("parent found")
-          $thisSticky = $(this)
-        }
-        $thisSticky
-          .data('originalPosition', $thisSticky.offset().top)
-          .data('originalHeight', $thisSticky.outerHeight())
-          .parent()
-          .height($thisSticky.outerHeight());
-
+      console.log("📡 Sending request:", {
+        connectorName,
+        connectorMethod,
+        params
       });
 
+      try {
+        container.connectors.sendRequest(
+          connectorName,
+          connectorVersion,
+          connectorMethod,
+          params,
+          function (resp) {
 
-    }
-    return $stickies;
-  },
-  stickyHeaderScroll: function (pageName, heroHeight, stickies) {
-    var scrollingPosition = $("#" + pageName + " .cdp_page_container ").scrollTop();
-    var smallHeroHeight = document.querySelector(".cdp_hero").offsetHeight;
-    var searchIcon = $("#" + pageName + " .cdp_page_container .search-icon");
+            console.log("📥 Response:", resp);
 
-    if (scrollingPosition != 0) {
-      stickies.each(function (i) {
+            if (!resp) {
+              reject({
+                success: false,
+                message: "Empty response"
+              });
+              return;
+            }
 
+            if (resp.success === false) {
+              reject(resp);
+              return;
+            }
 
-        var $thisSticky = $(this);
-        var $stickyPosition = $thisSticky.data('originalPosition');
-        if ($stickyPosition <= (heroHeight + scrollingPosition)) {
-
-          var $nextSticky = stickies.eq(i + 1);
-
-          var $nextStickyPosition = $nextSticky.data('originalPosition') - $thisSticky.data('originalHeight');
-
-
-          // TODO figure out why this isn't dynamically setting the top value ?
-          // create an "override" for native and desktop for the stickyFixed css class and add the top value there
-          // the hero is a fixed height for each so that ok
-          $thisSticky.addClass("stickyFixed");
-          // $thisSticky.css("top", heroHeight); // this works everywhere but here!!
-
-
-          if ($nextSticky.length > 0 && (scrollingPosition + $thisSticky.offset().top + heroHeight) >= $nextStickyPosition) {
-
-            var topPos = $nextStickyPosition;
-            $thisSticky.addClass("stickyAbsolute")
-              .css("top", smallHeroHeight);
-
+            resolve(resp);
           }
+        );
+      } catch (err) {
+        console.error("❌ sendRequest error:", err);
+        reject({
+          success: false,
+          message: "Exception while calling connector"
+        });
+      }
 
-        } else {
-          var $prevSticky = stickies.eq(i - 1);
+    });
 
-          $thisSticky.removeClass("stickyFixed");
-
-          if ($prevSticky.length > 0 && (scrollingPosition + smallHeroHeight) <= ($thisSticky.data('originalPosition') - $thisSticky.data('originalHeight'))) {
-            $prevSticky.removeClass("stickyAbsolute").removeAttr("style");
-          }
-        }
-      });
-    } else {
-      stickies.each(function (i) {
-        var $thisSticky = $(this);
-        $thisSticky.removeClass("stickyFixed").removeClass("stickyAbsolute").removeAttr("style");
-      });
-    }
   }
 };

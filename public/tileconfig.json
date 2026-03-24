@@ -1,15 +1,19 @@
 {
   "openData": {
     "actionType": 3,
-    "component": "Dashboard",
-    "pageName": "dashboard",
+    "component": "HomePage",
+    "pageName": "HomePage",
+    "pageTitle": "Customer",
     "openData": {
-      "componentID": "dashboard",
+      "componentID": "HomePage",
       "dataSource": {
         "type": 1,
-        "connectorName": "YourConnectorName",
+        "connectorName": "ClaysysPayrails",
         "connectorVersion": "1.0",
-        "connectorMethod": "aMethod"
+        "connectorMethod": "externalCallMethod",
+        "params": {
+          "url": "https://mocki.io/v1/04679e9a-0a00-4edc-a6b7-27a09c219c07"
+        }
       }
     }
   },

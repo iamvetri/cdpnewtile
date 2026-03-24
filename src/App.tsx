@@ -1,7 +1,7 @@
-import React, { Component, createRef, RefObject, createElement } from "react";
+import React, { Component, createElement, createRef, RefObject } from "react";
 import { Navigator } from "react-onsenui";
 import { TileInit, GoToErrorPage } from "./services/helper.svc";
-
+import { tile } from "./services/container.svc";
 
 class App extends Component<any, any> {
   // create a reference to the onsen Navigator
@@ -32,17 +32,47 @@ class App extends Component<any, any> {
     // if this fails go to error page
     const nav = this.navEl.current;
     if (nav) {
-      TileInit(nav).then(
-        data => {
-          console.log("Tile Init Success");
-        },
-        msg => {
-          // failed
-          console.log(msg);
-          GoToErrorPage(nav);
-        }
-      );
+      this.waitForCDPGlobals()
+        .then(() => TileInit(nav))
+        .then(
+          () => {
+            console.log("Tile Init Success");
+          },
+          (msg) => {
+            console.log("Tile Init Failed:", msg);
+            GoToErrorPage(nav);
+          }
+        );
     }
+  }
+
+  waitForCDPGlobals(timeoutMs = 8000, pollMs = 50): Promise<void> {
+    const started = Date.now();
+    return new Promise((resolve) => {
+      const tick = () => {
+        const c: any = (window as any).container;
+        const ready =
+          !!c &&
+          !!c.tile &&
+          !!c.tile.data &&
+          typeof c.tile.data.getTileConfig === "function" &&
+          !!c.connectors;
+
+        if (ready) {
+          resolve();
+          return;
+        }
+
+        if (Date.now() - started >= timeoutMs) {
+          // Continue anyway; TileInit will handle failure paths.
+          resolve();
+          return;
+        }
+
+        setTimeout(tick, pollMs);
+      };
+      tick();
+    });
   }
 
 

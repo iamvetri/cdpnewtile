@@ -4,20 +4,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <!-- DONT INCLUDE ON UPLOAD -->
-  <script src="https://cdn.cdp.wiki/cdp_bundle.js"></script>
-  <link rel="stylesheet" href="https://cdn.cdp.wiki/cdp_defaultTheme.css" type="text/css" />
-  <script src="tile.js"></script>
   <link rel="stylesheet" href="tile.css" type="text/css" />
-  <script src="mock/mock_container.js"></script>
-  <!-- DONT INCLUDE ON UPLOAD -->
   <script src="custom_console.js"></script>
   <title>Template</title>
   <script type="text/javascript">
-    ons.disableAutoStyling();
+    // Guard for CDP portal load order (ons/container may be injected after initial parse)
+    try {
+      if (window.ons && window.ons.disableAutoStyling) {
+        window.ons.disableAutoStyling();
+      }
+    } catch (e) {
+      console.warn("ons not available yet", e);
+    }
+
     setTimeout(() => {
-      console.log("show body");
-      container.tile.ui.showBody();
+      try {
+        if (window.container && window.container.tile && window.container.tile.ui && window.container.tile.ui.showBody) {
+          console.log("show body");
+          window.container.tile.ui.showBody();
+        }
+      } catch (e) {
+        console.warn("container.tile.ui.showBody not available", e);
+      }
     }, 500);
   </script>
 </head>
@@ -30,3 +38,4 @@
 </body>
 
 </html>
+ 

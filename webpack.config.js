@@ -1,9 +1,10 @@
-const HtmlWebpackPlugin = require('html-webpack-plugin');
+ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const path = require('path');
 const CopyPlugin = require("copy-webpack-plugin");
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 
 const LAUNCH_COMMAND = process.env.npm_lifecycle_event;
+console.log("LAUNCH_COMMAND: " + LAUNCH_COMMAND);
 const isProd = LAUNCH_COMMAND === 'prod';
 
 console.log("Production Build: " + isProd);
@@ -17,12 +18,13 @@ const baseConfig = {
     output: {
         path: path.resolve(__dirname, './dist'),
         filename: 'main.[contenthash].js',
-        publicPath: '/',
+        // CDP portal serves the tile from a nested URL; use relative asset URLs in prod
+        publicPath: isProd ? '' : '/',
     },
     devServer: {
         historyApiFallback: true,
         open: true,
-        port: 3000
+        port: 3005
     },
     module: {
         rules: [{
@@ -31,19 +33,19 @@ const baseConfig = {
             use: 'babel-loader'
 
         },
-            {
-                test: /\.less$/i,
-                use: [
-                    // compiles Less to CSS
-                    "style-loader",
-                    "css-loader",
-                    "less-loader",
-                ],
-            },
-            {
-                test: /\.(png|j?g|svg|gif)?$/,
-                use: 'file-loader?name=./[name].[ext]'
-            }
+        {
+            test: /\.less$/i,
+            use: [
+                // compiles Less to CSS
+                "style-loader",
+                "css-loader",
+                "less-loader",
+            ],
+        },
+        {
+            test: /\.(png|j?g|svg|gif)?$/,
+            use: 'file-loader?name=./[name].[ext]'
+        }
         ]
     },
     externals: {
@@ -88,36 +90,38 @@ const prodConfig = {
             collapseWhitespace: false,
             removeEmptyAttributes: true,
             removeRedundantAttributes: true,
-            removeStyleLinkTypeAttributes: true
+            removeStyleLinkTypeAttributes: true,
+            noErrorOnMissing: true
         }
     }),
-        new CopyPlugin({
-            patterns: [
-                {
-                    from: path.resolve(__dirname, './public/*.png'),
-                    to({ context, absoluteFilename }) {
-                        return Promise.resolve("./[name][ext]");
-                    }
-                },
-                {
-                    from: path.resolve(__dirname, './public/custom_console.js'),
-                    to({ context, absoluteFilename }) {
-                        return Promise.resolve("./[name][ext]");
-                    }
-                },
-                {
-                    from: path.resolve(__dirname, './public/tile*'),
-                    to({ context, absoluteFilename }) {
-                        return Promise.resolve("./[name][ext]");
-                    }
-                },
-                {
-                    from: path.resolve(__dirname, './public/*.less'),
-                    to({ context, absoluteFilename }) {
-                        return Promise.resolve("./[name][ext]");
-                    }
-                }]
-        })
+    new CopyPlugin({
+        patterns: [
+            {
+                from: "*.png",
+                context: path.resolve(__dirname, "public"),
+                to: "[name][ext]",
+                noErrorOnMissing: true
+            },
+            {
+                from: "custom_console.js",
+                context: path.resolve(__dirname, "public"),
+                to: "[name][ext]",
+                noErrorOnMissing: true
+            },
+            {
+                from: "tile*",
+                context: path.resolve(__dirname, "public"),
+                to: "[name][ext]",
+                noErrorOnMissing: true
+            },
+            {
+                from: "*.less",
+                context: path.resolve(__dirname, "public"),
+                to: "[name][ext]",
+                noErrorOnMissing: true
+            }
+        ]
+    })
     ]
 };
 

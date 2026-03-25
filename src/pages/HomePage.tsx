@@ -22,36 +22,77 @@ export interface IHomeState extends IBasePageStateModel {
   loading: boolean;
 }
 
-const panelStyle = {
+const panelStyle: React.CSSProperties = {
   background: "#fff",
-  borderRadius: "12px",
+  borderRadius: "16px",
   padding: "20px",
   marginBottom: "18px",
-  boxShadow: "0 2px 10px rgba(0, 0, 0, 0.08)"
+  border: "1px solid rgba(111, 129, 153, 0.14)",
+  boxShadow: "0 12px 28px rgba(24, 39, 75, 0.08)"
 };
 
-const detailGridStyle = {
+const pageScrollStyle: React.CSSProperties = {
+  height: "100%",
+  overflowY: "auto",
+  overflowX: "hidden",
+  WebkitOverflowScrolling: "touch",
+  boxSizing: "border-box",
+  padding: "20px 20px 72px",
+  background: "linear-gradient(180deg, #f6f8fb 0%, #edf2f8 100%)"
+};
+
+const heroPanelStyle: React.CSSProperties = {
+  ...panelStyle,
+  background: "linear-gradient(135deg, #16324f 0%, #214c73 45%, #2d678f 100%)",
+  color: "#fff",
+  padding: "24px"
+};
+
+const heroStatsStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+  gap: "12px",
+  marginTop: "18px"
+};
+
+const heroStatStyle: React.CSSProperties = {
+  background: "rgba(255, 255, 255, 0.12)",
+  border: "1px solid rgba(255, 255, 255, 0.14)",
+  borderRadius: "12px",
+  padding: "12px 14px"
+};
+
+const detailGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
   gap: "12px"
 };
 
-const detailItemStyle = {
+const detailItemStyle: React.CSSProperties = {
   background: "#f7f9fc",
   borderRadius: "8px",
   padding: "10px 12px"
 };
 
-const subSectionStyle = {
+const subSectionStyle: React.CSSProperties = {
   marginTop: "18px"
 };
 
-const listItemStyle = {
+const listItemStyle: React.CSSProperties = {
   background: "#f7f9fc",
-  borderRadius: "8px",
+  borderRadius: "12px",
+  border: "1px solid rgba(111, 129, 153, 0.12)",
   padding: "12px",
   marginBottom: "10px",
   listStyle: "none"
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  marginBottom: "14px"
 };
 
 class HomePage extends Component<IHomeProps, IHomeState> {
@@ -73,7 +114,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     const { party, deposits, loans, loading } = this.state;
 
     return (
-      <Page key="home" id="home" className={this.pageClass}>
+      <Page key="home" id="home" className={this.pageClass} style={{ height: "100%" }}>
         <Toast isOpen={this.state.openToast} className={this.state.toastColor}>
           <div>{this.state.toastMsg}</div>
           <button onClick={this.dismissToast}>OK</button>
@@ -82,8 +123,10 @@ class HomePage extends Component<IHomeProps, IHomeState> {
         <div
           className="cdp_page_container home-page-scroll"
           ref={this.pageContainer}
-          style={{ padding: "20px" }}
+          style={pageScrollStyle}
         >
+          {this.renderOverview(party, deposits, loans)}
+
           {loading && <h3>Loading data...</h3>}
 
           {!loading && !party && (
@@ -140,6 +183,48 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     }
   };
 
+  renderOverview = (party: IParty | null, deposits: IDeposit[], loans: ILoan[]) => {
+    const membershipDate = party
+      ? this.formatDate(this.getCustomValue(party.customData, "MembershipDate"))
+      : "--";
+
+    return (
+      <div style={heroPanelStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.75 }}>
+              Customer Overview
+            </div>
+            <h1 style={{ margin: "8px 0 6px", fontSize: "28px", lineHeight: 1.1 }}>
+              {party?.name || "Customer Details"}
+            </h1>
+            <div style={{ opacity: 0.82 }}>
+              Member Since: {membershipDate}
+            </div>
+          </div>
+          <div style={{ minWidth: "180px", textAlign: "right" }}>
+            <div style={{ fontSize: "13px", opacity: 0.72 }}>Customer Id</div>
+            <div style={{ fontSize: "22px", fontWeight: 700 }}>{party?.id || "--"}</div>
+          </div>
+        </div>
+
+        <div style={heroStatsStyle}>
+          {this.renderHeroMetric("Contacts", `${party?.contacts?.length || 0}`)}
+          {this.renderHeroMetric("Documents", `${party?.identificationDocuments?.length || 0}`)}
+          {this.renderHeroMetric("Deposits", `${deposits.length}`)}
+          {this.renderHeroMetric("Loans", `${loans.length}`)}
+        </div>
+      </div>
+    );
+  };
+
+  renderHeroMetric = (label: string, value: string) => (
+    <div key={label} style={heroStatStyle}>
+      <div style={{ fontSize: "12px", opacity: 0.74, marginBottom: "4px" }}>{label}</div>
+      <div style={{ fontSize: "24px", fontWeight: 700, lineHeight: 1 }}>{value}</div>
+    </div>
+  );
+
   renderPartyDetails = (party: IParty) => {
     const employment = party.employment || [];
     const memberFields = [
@@ -158,7 +243,10 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
     return (
       <div style={panelStyle}>
-        <h2>Customer Details</h2>
+        <div style={sectionTitleStyle}>
+          <h2 style={{ margin: 0 }}>Customer Details</h2>
+          <div style={{ color: "#586174", fontSize: "13px" }}>Profile and member information</div>
+        </div>
 
         <div style={detailGridStyle}>
           {this.renderField("Customer Id", party.id)}
@@ -251,7 +339,10 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
     return (
       <div key={acc.accountId || index} className="account-card" style={listItemStyle}>
-        <h3 style={{ marginTop: 0 }}>{acc.description || acc.accountNickName || "Deposit Account"}</h3>
+        <div style={sectionTitleStyle}>
+          <h3 style={{ margin: 0 }}>{acc.description || acc.accountNickName || "Deposit Account"}</h3>
+          <div style={{ color: "#1f5d8b", fontWeight: 700 }}>{this.formatCurrency(acc.availableBalance)}</div>
+        </div>
         <div style={detailGridStyle}>
           {this.renderField("Account Id", acc.accountId)}
           {this.renderField("Nickname", acc.accountNickName)}
@@ -302,7 +393,10 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
     return (
       <div key={loan.accountId || index} className="account-card" style={listItemStyle}>
-        <h3 style={{ marginTop: 0 }}>{loan.description || loan.accountNickName || "Loan Account"}</h3>
+        <div style={sectionTitleStyle}>
+          <h3 style={{ margin: 0 }}>{loan.description || loan.accountNickName || "Loan Account"}</h3>
+          <div style={{ color: "#8b3b1f", fontWeight: 700 }}>{this.formatCurrency(loan.actualBalance)}</div>
+        </div>
         <div style={detailGridStyle}>
           {this.renderField("Account Id", loan.accountId)}
           {this.renderField("Nickname", loan.accountNickName)}

@@ -5,7 +5,7 @@ import ConnectorActionModel from "../models/CDP/MetaAction/ConnectorAction.model
 import OpenTileActionModel from "../models/CDP/MetaAction/OpenTileAction.model";
 import RequestFileModel from "../models/CDP/MetaAction/RequestFile.model";
 import ContainerResponse from "../models/CDP/ContainerResponse.model";
-import { container, tile } from "./container.svc";
+import { container, tile, sendRequest } from "./container.svc";
 import { Navigator } from "react-onsenui";
 import HomePage from "../pages/HomePage";
 
@@ -35,14 +35,41 @@ export function GetTileConfig(): Promise<any> {
 
 export function GetContainerOpenData(): Promise<any> {
   return new Promise((resolve) => {
-    container.tile.data.getOpenData((response: ContainerResponse) => {
-      if (response.success && response.data?.opendata) {
-        resolve(response.data.opendata);
-        return;
-      }
+    const getOpenData = container?.tile?.data?.getOpenData;
+    const started = Date.now();
+    const timeoutMs = 3000;
+    const pollMs = 100;
 
+    if (typeof getOpenData !== "function") {
       resolve(null);
-    });
+      return;
+    }
+
+    const tryRead = () => {
+      getOpenData((response: ContainerResponse) => {
+        const openData =
+          response?.data?.opendata ??
+          response?.data?.openData ??
+          response?.data?.open_data ??
+          response?.opendata ??
+          response?.openData ??
+          null;
+
+        if (response?.success && openData) {
+          resolve(openData);
+          return;
+        }
+
+        if (Date.now() - started >= timeoutMs) {
+          resolve(null);
+          return;
+        }
+
+        setTimeout(tryRead, pollMs);
+      });
+    };
+
+    tryRead();
   });
 }
 
@@ -59,6 +86,36 @@ const getFunctionFromString = (functionString: string) => {
 
   return scope[scopeSplit[scopeSplit.length - 1]];
 };
+
+async function resolveOpenPageData(openData: any): Promise<any> {
+  const connectorRequest = openData?.connectorRequest ?? openData?.dataSource;
+
+  if (
+    !connectorRequest?.connectorName ||
+    !connectorRequest?.connectorVersion ||
+    !connectorRequest?.connectorMethod
+  ) {
+    return openData;
+  }
+
+  const response = await sendRequest(
+    connectorRequest.connectorName,
+    connectorRequest.connectorVersion,
+    connectorRequest.connectorMethod,
+    connectorRequest.params || {}
+  );
+
+  const {
+    dataSource: _dataSource,
+    connectorRequest: _connectorRequest,
+    ...resolvedOpenData
+  } = openData || {};
+
+  return {
+    ...resolvedOpenData,
+    connectorResponse: response
+  };
+}
 
 export function TileInit(nav: Navigator): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -137,14 +194,16 @@ export function ProcessMetaAction(
           return;
         }
 
-        navigator
-          .pushPage({
-            component,
-            props: {
-              componentModel: openPageAction.openData,
-              methods
-            }
-          })
+        resolveOpenPageData(openPageAction.openData)
+          .then((componentModel) =>
+            navigator.pushPage({
+              component,
+              props: {
+                componentModel,
+                methods
+              }
+            })
+          )
           .then(() => {
             const clone = (navigator as any).clone;
             container.tile.navigation.pushPanelWithTitle(
@@ -153,6 +212,9 @@ export function ProcessMetaAction(
               openPageAction.pageTitle
             );
             resolve();
+          })
+          .catch((err) => {
+            reject(err);
           });
         break;
       }

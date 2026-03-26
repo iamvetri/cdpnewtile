@@ -8,7 +8,7 @@ import { IParty, IContact, ICustomData, IIdentificationDocument } from "../model
 import { IDeposit, ILoan, IAccountNote } from "../models/Account.model";
 
 import { isNativeApp } from "../services/helper.svc";
-import { getPartyDetails, getAccounts } from "../services/productConnector.service";
+import { getPartyDetails, parsePartyResponse } from "../services/productConnector.service";
 import HomePageOverview from "../components/HomePageOverview";
 
 export interface IHomeProps extends IBasePropsModel {}
@@ -138,22 +138,92 @@ class HomePage extends Component<IHomeProps, IHomeState> {
       this.pageClass = "native";
     }
 
+    console.log("HomePage componentModel:", this.props.componentModel);
     this.loadData();
   }
+
+  getPartyIdFromOpenData = (): string | null => {
+    const model = this.props.componentModel;
+
+    return (
+      model?.partyId ||
+      model?.customerId ||
+      model?.id ||
+      model?.party?.id ||
+      model?.customer?.id ||
+      model?.memberId ||
+      model?.connectorRequest?.params?.partyId ||
+      model?.connectorRequest?.params?.customerId ||
+      model?.connectorRequest?.params?.id ||
+      model?.dataSource?.params?.partyId ||
+      model?.dataSource?.params?.customerId ||
+      model?.dataSource?.params?.id ||
+      null
+    );
+  };
+
+  getPartyConnectorConfig = () => {
+    const connectorConfig =
+      this.props.componentModel?.connectorRequest ||
+      this.props.componentModel?.dataSource;
+
+    if (
+      !connectorConfig?.connectorName ||
+      !connectorConfig?.connectorVersion ||
+      !connectorConfig?.connectorMethod
+    ) {
+      return null;
+    }
+
+    return {
+      connectorName: connectorConfig.connectorName,
+      connectorVersion: connectorConfig.connectorVersion,
+      connectorMethod: connectorConfig.connectorMethod,
+      params: connectorConfig.params
+    };
+  };
+
+  getPreloadedParty = (): IParty | null => {
+    return parsePartyResponse(this.props.componentModel?.connectorResponse);
+  };
 
   loadData = async () => {
     try {
       this.setState({ loading: true });
 
-      const [party, accountData] = await Promise.all([
-        getPartyDetails("12345"),
-        getAccounts("12345")
-      ]);
+      const preloadedParty = this.getPreloadedParty();
+      if (preloadedParty) {
+        this.setState({
+          party: preloadedParty,
+          deposits: [],
+          loans: [],
+          loading: false
+        });
+        return;
+      }
+
+      const partyId = this.getPartyIdFromOpenData()?.trim() || null;
+      const connectorConfig = this.getPartyConnectorConfig();
+
+      if (!partyId && !connectorConfig) {
+        console.warn(
+          "No partyId or dataSource connector found in componentModel; skipping customer load"
+        );
+        this.setState({
+          party: null,
+          deposits: [],
+          loans: [],
+          loading: false
+        });
+        return;
+      }
+
+      const party = await getPartyDetails(partyId, connectorConfig);
 
       this.setState({
         party,
-        deposits: accountData?.deposits || [],
-        loans: accountData?.loans || [],
+        deposits: [],
+        loans: [],
         loading: false
       });
     } catch (err) {

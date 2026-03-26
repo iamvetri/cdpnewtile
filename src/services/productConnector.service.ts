@@ -1,17 +1,76 @@
 import { sendRequest } from "./container.svc";
 import { IParty } from "../models/Party.model";
-import { IDeposit, ILoan } from "../models/Account.model";
 
-const PARTY_MOCK_URL =
-  "https://mocki.io/v1/04679e9a-0a00-4edc-a6b7-27a09c219c07";
-const ACCOUNTS_MOCK_URL =
-  "https://mocki.io/v1/fa3a2496-becb-44b2-a045-f5ec768b11f3";
+interface IPartyConnectorConfig {
+  connectorName?: string;
+  connectorVersion?: string;
+  connectorMethod?: string;
+  params?: any;
+}
 
-/** CDP portal often returns `{ success: true, data: null }` from externalCallMethod; load JSON from the URL instead. */
+const DEFAULT_PARTY_CONNECTOR: Required<
+  Pick<IPartyConnectorConfig, "connectorName" | "connectorVersion" | "connectorMethod">
+> = {
+  connectorName: "ClaysysPayrails",
+  connectorVersion: "1.0",
+  connectorMethod: "getPartyById"
+};
+
+const partyRequestCache = new Map<string, IParty | null>();
+const inFlightPartyRequests = new Map<string, Promise<IParty | null>>();
+
+function normalizePartyId(partyId?: string | null): string {
+  return typeof partyId === "string" ? partyId.trim() : "";
+}
+
+function buildPartyRequestParams(
+  partyId?: string | null,
+  params?: any
+): Record<string, any> {
+  const normalizedPartyId = normalizePartyId(partyId);
+  const requestParams =
+    params != null && typeof params === "object" && !Array.isArray(params)
+      ? { ...params }
+      : {};
+
+  if (!normalizedPartyId) {
+    return requestParams;
+  }
+
+  if (!requestParams.partyId) {
+    requestParams.partyId = normalizedPartyId;
+  }
+
+  if (!requestParams.id) {
+    requestParams.id = normalizedPartyId;
+  }
+
+  if (!requestParams.customerId) {
+    requestParams.customerId = normalizedPartyId;
+  }
+
+  return requestParams;
+}
+
+function buildPartyRequestKey(
+  connectorName: string,
+  connectorVersion: string,
+  connectorMethod: string,
+  requestParams: Record<string, any>
+): string {
+  return JSON.stringify({
+    connectorName,
+    connectorVersion,
+    connectorMethod,
+    requestParams
+  });
+}
+
 function unwrapConnectorBody(raw: any): any | null {
   if (raw == null) {
     return null;
   }
+
   if (typeof raw === "string" && raw.trim().length > 0) {
     try {
       return unwrapConnectorBody(JSON.parse(raw));
@@ -19,47 +78,27 @@ function unwrapConnectorBody(raw: any): any | null {
       return null;
     }
   }
+
   if (typeof raw === "object" && !Array.isArray(raw)) {
     if ("data" in raw || "body" in raw || "response" in raw) {
       const inner = raw.data ?? raw.body ?? raw.response;
-      if (inner != null && (typeof inner !== "object" || Object.keys(inner).length > 0)) {
+
+      if (
+        inner != null &&
+        (typeof inner !== "object" || Object.keys(inner).length > 0)
+      ) {
         return inner;
       }
+
       return null;
     }
+
     if (Object.keys(raw).length > 0) {
       return raw;
     }
   }
+
   return null;
-}
-
-async function getJsonPayload(
-  resp: any,
-  fallbackUrl: string
-): Promise<any | null> {
-  const raw = resp?.response ?? resp?.data;
-  const fromConnector = unwrapConnectorBody(raw);
-
-  if (fromConnector != null) {
-    return fromConnector;
-  }
-
-  try {
-    console.log(
-      "📡 Connector returned no JSON body; using direct fetch:",
-      fallbackUrl
-    );
-    const r = await fetch(fallbackUrl, { credentials: "omit" });
-    if (!r.ok) {
-      console.error("❌ Fallback fetch failed:", r.status, fallbackUrl);
-      return null;
-    }
-    return await r.json();
-  } catch (e) {
-    console.error("❌ Fallback fetch error:", e);
-    return null;
-  }
 }
 
 function mapPartyFromPayload(data: any): IParty | null {
@@ -68,7 +107,7 @@ function mapPartyFromPayload(data: any): IParty | null {
     data?.data?.partyMessage?.partyList?.party?.[0];
 
   if (!party) {
-    console.warn("⚠️ Party not found in response");
+    console.warn("Party not found in response");
     return null;
   }
 
@@ -91,85 +130,85 @@ function mapPartyFromPayload(data: any): IParty | null {
   };
 }
 
-/**
- * ✅ Fetch Party Details
- */
+export function parsePartyResponse(response: any): IParty | null {
+  if (!response || response.success === false) {
+    return null;
+  }
+
+  const data = unwrapConnectorBody(response?.response ?? response?.data) ?? response;
+  return mapPartyFromPayload(data);
+}
+
 export const getPartyDetails = async (
-  partyId: string = "12345"
+  partyId?: string | null,
+  connectorConfig?: IPartyConnectorConfig | null
 ): Promise<IParty | null> => {
-  const resp: any = await sendRequest(
-    "ClaysysPayrails",
-    "1.0",
-    "externalCallMethod",
-    {
-      url: PARTY_MOCK_URL
-    }
+  const connectorName =
+    connectorConfig?.connectorName || DEFAULT_PARTY_CONNECTOR.connectorName;
+  const connectorVersion =
+    connectorConfig?.connectorVersion || DEFAULT_PARTY_CONNECTOR.connectorVersion;
+  const connectorMethod =
+    connectorConfig?.connectorMethod || DEFAULT_PARTY_CONNECTOR.connectorMethod;
+  const requestParams = buildPartyRequestParams(
+    partyId,
+    connectorConfig?.params
   );
 
-  console.log("🔍 Party FULL RESPONSE:", resp);
-
-  if (!resp || resp.success === false) {
-    console.error("❌ Party API Error:", resp?.message);
+  if (
+    !connectorConfig &&
+    connectorMethod === DEFAULT_PARTY_CONNECTOR.connectorMethod &&
+    Object.keys(requestParams).length === 0
+  ) {
+    console.warn(
+      "Skipping getPartyById because no partyId or connector params were provided"
+    );
     return null;
   }
 
-  try {
-    const data = await getJsonPayload(resp, PARTY_MOCK_URL);
-    console.log("✅ FINAL PARTY DATA:", data);
-    if (!data) {
-      return null;
-    }
-    return mapPartyFromPayload(data);
-  } catch (err) {
-    console.error("❌ Party Parsing error:", err);
-    return null;
-  }
-};
-
-
-/**
- * ✅ Fetch Account Details
- */
-export const getAccounts = async (
-  partyId: string = "12345"
-): Promise<{ deposits: IDeposit[]; loans: ILoan[] } | null> => {
-  const resp: any = await sendRequest(
-    "ClaysysPayrails",
-    "1.0",
-    "externalCallMethod",
-    {
-      url: ACCOUNTS_MOCK_URL
-    }
+  const requestKey = buildPartyRequestKey(
+    connectorName,
+    connectorVersion,
+    connectorMethod,
+    requestParams
   );
-
-  console.log("🔍 Accounts FULL RESPONSE:", resp);
-
-  if (!resp || resp.success === false) {
-    console.error("❌ Accounts API Error:", resp?.message);
-    return null;
+  const cachedParty = partyRequestCache.get(requestKey);
+  if (cachedParty !== undefined) {
+    return cachedParty;
   }
 
-  try {
-    const data = await getJsonPayload(resp, ACCOUNTS_MOCK_URL);
-    console.log("✅ FINAL ACCOUNTS DATA:", data);
-    if (!data) {
+  const existingRequest = inFlightPartyRequests.get(requestKey);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = (async () => {
+    const resp: any = await sendRequest(
+      connectorName,
+      connectorVersion,
+      connectorMethod,
+      requestParams
+    );
+
+    console.log("Party full response:", resp);
+
+    if (!resp || resp.success === false) {
+      console.warn(
+        "Party connector returned no usable data:",
+        resp?.message || resp
+      );
       return null;
     }
 
-    const source = data?.accountContainer ? data : data?.data;
+    const party = parsePartyResponse(resp);
 
-    const deposits: IDeposit[] =
-      source?.accountContainer?.depositMessage?.depositList?.deposit || [];
+    partyRequestCache.set(requestKey, party);
 
-    const loans: ILoan[] =
-      source?.accountContainer?.loanMessage?.loanList?.loan || [];
+    return party;
+  })().finally(() => {
+    inFlightPartyRequests.delete(requestKey);
+  });
 
-    return {
-      deposits,
-      loans
-    };
-  } catch (err) {
-    console.error("❌ Accounts Parsing error:", err);
-    return null;
-  }
+  inFlightPartyRequests.set(requestKey, request);
+
+  return request;
 };

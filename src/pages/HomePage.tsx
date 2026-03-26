@@ -9,6 +9,7 @@ import { IDeposit, ILoan, IAccountNote } from "../models/Account.model";
 
 import { isNativeApp } from "../services/helper.svc";
 import { getPartyDetails, getAccounts } from "../services/productConnector.service";
+import HomePageOverview from "../components/HomePageOverview";
 
 export interface IHomeProps extends IBasePropsModel {}
 
@@ -39,27 +40,6 @@ const pageScrollStyle: React.CSSProperties = {
   boxSizing: "border-box",
   padding: "20px 20px 72px",
   background: "linear-gradient(180deg, #f6f8fb 0%, #edf2f8 100%)"
-};
-
-const heroPanelStyle: React.CSSProperties = {
-  ...panelStyle,
-  background: "linear-gradient(135deg, #16324f 0%, #214c73 45%, #2d678f 100%)",
-  color: "#fff",
-  padding: "24px"
-};
-
-const heroStatsStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-  gap: "12px",
-  marginTop: "18px"
-};
-
-const heroStatStyle: React.CSSProperties = {
-  background: "rgba(255, 255, 255, 0.12)",
-  border: "1px solid rgba(255, 255, 255, 0.14)",
-  borderRadius: "12px",
-  padding: "12px 14px"
 };
 
 const detailGridStyle: React.CSSProperties = {
@@ -189,41 +169,17 @@ class HomePage extends Component<IHomeProps, IHomeState> {
       : "--";
 
     return (
-      <div style={heroPanelStyle}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: "12px", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.75 }}>
-              Customer Overview
-            </div>
-            <h1 style={{ margin: "8px 0 6px", fontSize: "28px", lineHeight: 1.1 }}>
-              {party?.name || "Customer Details"}
-            </h1>
-            <div style={{ opacity: 0.82 }}>
-              Member Since: {membershipDate}
-            </div>
-          </div>
-          <div style={{ minWidth: "180px", textAlign: "right" }}>
-            <div style={{ fontSize: "13px", opacity: 0.72 }}>Customer Id</div>
-            <div style={{ fontSize: "22px", fontWeight: 700 }}>{party?.id || "--"}</div>
-          </div>
-        </div>
-
-        <div style={heroStatsStyle}>
-          {this.renderHeroMetric("Contacts", `${party?.contacts?.length || 0}`)}
-          {this.renderHeroMetric("Documents", `${party?.identificationDocuments?.length || 0}`)}
-          {this.renderHeroMetric("Deposits", `${deposits.length}`)}
-          {this.renderHeroMetric("Loans", `${loans.length}`)}
-        </div>
-      </div>
+      <HomePageOverview
+        title={party?.name || "Customer Details"}
+        membershipDate={membershipDate}
+        customerId={party?.id || "--"}
+        contactsCount={party?.contacts?.length || 0}
+        documentsCount={party?.identificationDocuments?.length || 0}
+        depositsCount={deposits.length}
+        loansCount={loans.length}
+      />
     );
   };
-
-  renderHeroMetric = (label: string, value: string) => (
-    <div key={label} style={heroStatStyle}>
-      <div style={{ fontSize: "12px", opacity: 0.74, marginBottom: "4px" }}>{label}</div>
-      <div style={{ fontSize: "24px", fontWeight: 700, lineHeight: 1 }}>{value}</div>
-    </div>
-  );
 
   renderPartyDetails = (party: IParty) => {
     const employment = party.employment || [];

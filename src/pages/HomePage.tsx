@@ -14,7 +14,6 @@ export interface IHomeState extends IBasePageStateModel {
   toastMsg: string;
   toastColor: string;
 }
-
 const pageScrollStyle: React.CSSProperties = {
   height: "100%",
   overflowY: "auto",
@@ -32,7 +31,6 @@ const preStyle: React.CSSProperties = {
   overflowX: "auto",
   marginTop: "20px",
   border: "1px solid #ccc",
-  whiteSpace: "pre-wrap",
   wordWrap: "break-word"
 };
 

@@ -1,5 +1,6 @@
 import React from "react";
 import { ITransactionFilters } from "../models/Transaction.model";
+import Button from "./Button";
 
 export interface ITransactionsFilterProps {
   filters: ITransactionFilters;
@@ -30,16 +31,6 @@ const inputStyle: React.CSSProperties = {
   fontSize: "14px",
   flex: "1 1 140px"
 };
-
-const buttonStyle = (primary = false): React.CSSProperties => ({
-  padding: "8px 16px",
-  borderRadius: "6px",
-  border: primary ? "none" : "1px solid #d1d5db",
-  background: primary ? "#2d678f" : "#fff",
-  color: primary ? "#fff" : "#374151",
-  fontWeight: 600,
-  cursor: "pointer"
-});
 
 const TransactionsFilter: React.FC<ITransactionsFilterProps> = ({
   filters,
@@ -107,8 +98,8 @@ const TransactionsFilter: React.FC<ITransactionsFilterProps> = ({
       </div>
 
       <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-        <button style={buttonStyle()} onClick={onClear}>Clear</button>
-        <button style={buttonStyle(true)} onClick={onApply}>Apply Filters</button>
+        <Button variant="secondary" onClick={onClear}>Clear</Button>
+        <Button variant="primary" onClick={onApply}>Apply Filters</Button>
       </div>
     </div>
   );

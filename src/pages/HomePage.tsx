@@ -1,5 +1,5 @@
-import React, { Component, createRef } from "react";
-import { Page, Toast } from "react-onsenui";
+import React, { Component } from "react";
+import { Page, Toast, Button } from "react-onsenui";
 
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
@@ -10,7 +10,7 @@ import MemberProfile from "../components/MemberProfile";
 import TransactionsFilter from "../components/TransactionsFilter";
 import { ITransaction, ITransactionFilters, IPagination, ISorting } from "../models/Transaction.model";
 
-export interface IHomeProps extends IBasePropsModel {}
+export interface IHomeProps extends IBasePropsModel { }
 
 export interface IHomeState extends IBasePageStateModel {
   profile: any | null;
@@ -53,7 +53,6 @@ const tdStyle: React.CSSProperties = {
 
 class HomePage extends Component<IHomeProps, IHomeState> {
   pageClass = "desktop";
-  pageContainer: any = createRef();
 
   state: IHomeState = {
     componentModel: undefined as any,
@@ -171,34 +170,34 @@ class HomePage extends Component<IHomeProps, IHomeState> {
           style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}
         >
           {profile && (
-            <MemberProfile 
-              firstName={profile.firstName} 
-              lastName={profile.lastName} 
-              email={profile.email} 
-              phone={profile.phone} 
+            <MemberProfile
+              firstName={profile.firstName}
+              lastName={profile.lastName}
+              email={profile.email}
+              phone={profile.phone}
             />
           )}
 
-          <TransactionsFilter 
-            filters={filters} 
-            onFilterChange={this.handleFilterChange} 
-            onApply={this.handleApplyFilters} 
+          <TransactionsFilter
+            filters={filters}
+            onFilterChange={this.handleFilterChange}
+            onApply={this.handleApplyFilters}
             onClear={this.handleClearFilters}
           />
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h2 style={{ margin: 0 }}>Transactions</h2>
             <div>
-              <button 
-                onClick={this.loadData} 
-                className="button button--quiet" 
+              <button
+                onClick={this.loadData}
+                className="button button--quiet"
                 style={{ marginRight: "10px" }}
                 disabled={loading}
               >
                 Refresh Data
               </button>
-              <button 
-                onClick={this.handleDownload} 
+              <button
+                onClick={this.handleDownload}
                 className="button button--cta"
                 disabled={downloading}
                 style={{ background: "#2d678f" }}
@@ -261,15 +260,15 @@ class HomePage extends Component<IHomeProps, IHomeState> {
                   Showing {Math.min((pagination.pageNumber - 1) * pagination.pageSize + 1, totalRecords)} to {Math.min(pagination.pageNumber * pagination.pageSize, totalRecords)} of {totalRecords} entries
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button 
-                    onClick={this.handlePrevPage} 
+                  <button
+                    onClick={this.handlePrevPage}
                     disabled={pagination.pageNumber === 1}
                     style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #d1d5db", background: pagination.pageNumber === 1 ? "#f3f4f6" : "#fff", cursor: pagination.pageNumber === 1 ? "not-allowed" : "pointer" }}
                   >
                     Previous
                   </button>
-                  <button 
-                    onClick={this.handleNextPage} 
+                  <button
+                    onClick={this.handleNextPage}
                     disabled={pagination.pageNumber * pagination.pageSize >= totalRecords}
                     style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #d1d5db", background: pagination.pageNumber * pagination.pageSize >= totalRecords ? "#f3f4f6" : "#fff", cursor: pagination.pageNumber * pagination.pageSize >= totalRecords ? "not-allowed" : "pointer" }}
                   >

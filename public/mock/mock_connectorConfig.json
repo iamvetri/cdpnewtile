@@ -1,9 +1,0 @@
-[
-  {
-    "ConnectorName": "ClaysysPayrails",
-    "ConnectorMethod": "externalCallMethod",
-    "ConnectorVersion": "1.0",
-    "RequestMethod": "POST",
-    "ConnectorURL": "http://localhost:8080/externalConnector/claysysPayrails/1.0/externalCallMethod"
-  }
-]

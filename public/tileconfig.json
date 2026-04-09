@@ -3,17 +3,15 @@
     "actionType": 3,
     "component": "HomePage",
     "pageName": "HomePage",
-    "pageTitle": "Customer",
     "openData": {
       "componentID": "HomePage",
-      "connectorRequest": {
+      "dataSource": {
+        "type": 1,
         "connectorName": "ClaysysPayrails",
         "connectorVersion": "1.0",
-        "connectorMethod": "getPartyById",
+        "connectorMethod": "externalCallMethod",
         "params": {
-          "partyId": "12345",
-          "id": "12345",
-          "customerId": "12345"
+          "url": "https://mocki.io/v1/04679e9a-0a00-4edc-a6b7-27a09c219c07"
         }
       }
     }

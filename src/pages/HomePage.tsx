@@ -4,75 +4,51 @@ import { Page, Toast } from "react-onsenui";
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
 
-import { IParty, IContact, ICustomData, IIdentificationDocument } from "../models/Party.model";
-import { IDeposit, ILoan, IAccountNote } from "../models/Account.model";
-
 import { isNativeApp } from "../services/helper.svc";
-import { getPartyDetails, parsePartyResponse } from "../services/productConnector.service";
-import HomePageOverview from "../components/HomePageOverview";
+import { getMemberProfile, getTransactions, downloadTransactionsReport } from "../services/productConnector.service";
+import MemberProfile from "../components/MemberProfile";
+import TransactionsFilter from "../components/TransactionsFilter";
+import { ITransaction, ITransactionFilters, IPagination, ISorting } from "../models/Transaction.model";
 
 export interface IHomeProps extends IBasePropsModel {}
 
 export interface IHomeState extends IBasePageStateModel {
-  party: IParty | null;
-  deposits: IDeposit[];
-  loans: ILoan[];
+  profile: any | null;
+  transactions: ITransaction[];
+  filters: ITransactionFilters;
+  pagination: IPagination;
+  sorting: ISorting;
+  totalRecords: number;
   openToast: boolean;
   toastMsg: string;
   toastColor: string;
   loading: boolean;
+  downloading: boolean;
 }
 
-const panelStyle: React.CSSProperties = {
-  background: "#fff",
-  borderRadius: "16px",
-  padding: "20px",
-  marginBottom: "18px",
-  border: "1px solid rgba(111, 129, 153, 0.14)",
-  boxShadow: "0 12px 28px rgba(24, 39, 75, 0.08)"
-};
-
-const pageScrollStyle: React.CSSProperties = {
-  height: "100%",
-  overflowY: "auto",
-  overflowX: "hidden",
-  WebkitOverflowScrolling: "touch",
-  boxSizing: "border-box",
-  padding: "20px 20px 72px",
-  background: "linear-gradient(180deg, #f6f8fb 0%, #edf2f8 100%)"
-};
-
-const detailGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-  gap: "12px"
-};
-
-const detailItemStyle: React.CSSProperties = {
-  background: "#f7f9fc",
+const tableStyle: React.CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+  marginTop: "10px",
+  backgroundColor: "#fff",
   borderRadius: "8px",
-  padding: "10px 12px"
+  overflow: "hidden",
+  boxShadow: "0 4px 6px rgba(0,0,0,0.05)"
 };
 
-const subSectionStyle: React.CSSProperties = {
-  marginTop: "18px"
-};
-
-const listItemStyle: React.CSSProperties = {
-  background: "#f7f9fc",
-  borderRadius: "12px",
-  border: "1px solid rgba(111, 129, 153, 0.12)",
+const thStyle: React.CSSProperties = {
+  backgroundColor: "#16324f",
+  color: "#fff",
   padding: "12px",
-  marginBottom: "10px",
-  listStyle: "none"
+  textAlign: "left",
+  fontSize: "14px"
 };
 
-const sectionTitleStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "12px",
-  marginBottom: "14px"
+const tdStyle: React.CSSProperties = {
+  padding: "12px",
+  borderBottom: "1px solid #e5e7eb",
+  fontSize: "14px",
+  color: "#374151"
 };
 
 class HomePage extends Component<IHomeProps, IHomeState> {
@@ -81,149 +57,39 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
   state: IHomeState = {
     componentModel: undefined as any,
-    party: null,
-    deposits: [],
-    loans: [],
+    profile: null,
+    transactions: [],
+    filters: {},
+    pagination: { pageNumber: 1, pageSize: 5 },
+    sorting: { sortBy: "date", sortDirection: "desc" },
+    totalRecords: 0,
     openToast: false,
     toastMsg: "",
     toastColor: "danger",
-    loading: true
+    loading: true,
+    downloading: false
   };
-
-  render() {
-    const { party, deposits, loans, loading } = this.state;
-
-    return (
-      <Page key="home" id="home" className={this.pageClass} style={{ height: "100%" }}>
-        <Toast isOpen={this.state.openToast} className={this.state.toastColor}>
-          <div>{this.state.toastMsg}</div>
-          <button onClick={this.dismissToast}>OK</button>
-        </Toast>
-
-        <div
-          className="cdp_page_container home-page-scroll"
-          ref={this.pageContainer}
-          style={pageScrollStyle}
-        >
-          {this.renderOverview(party, deposits, loans)}
-
-          {loading && <h3>Loading data...</h3>}
-
-          {!loading && !party && (
-            <h3 style={{ color: "gray" }}>No customer data found</h3>
-          )}
-
-          {party && this.renderPartyDetails(party)}
-
-          {deposits.length > 0 && (
-            <div style={panelStyle}>
-              <h2>Deposit Accounts</h2>
-              {deposits.map((acc, i) => this.renderDeposit(acc, i))}
-            </div>
-          )}
-
-          {loans.length > 0 && (
-            <div style={panelStyle}>
-              <h2>Loan Accounts</h2>
-              {loans.map((loan, i) => this.renderLoan(loan, i))}
-            </div>
-          )}
-        </div>
-      </Page>
-    );
-  }
 
   componentDidMount() {
     if (isNativeApp()) {
       this.pageClass = "native";
     }
-
-    console.log("HomePage componentModel:", this.props.componentModel);
     this.loadData();
   }
-
-  getPartyIdFromOpenData = (): string | null => {
-    const model = this.props.componentModel;
-
-    return (
-      model?.partyId ||
-      model?.customerId ||
-      model?.id ||
-      model?.party?.id ||
-      model?.customer?.id ||
-      model?.memberId ||
-      model?.connectorRequest?.params?.partyId ||
-      model?.connectorRequest?.params?.customerId ||
-      model?.connectorRequest?.params?.id ||
-      model?.dataSource?.params?.partyId ||
-      model?.dataSource?.params?.customerId ||
-      model?.dataSource?.params?.id ||
-      null
-    );
-  };
-
-  getPartyConnectorConfig = () => {
-    const connectorConfig =
-      this.props.componentModel?.connectorRequest ||
-      this.props.componentModel?.dataSource;
-
-    if (
-      !connectorConfig?.connectorName ||
-      !connectorConfig?.connectorVersion ||
-      !connectorConfig?.connectorMethod
-    ) {
-      return null;
-    }
-
-    return {
-      connectorName: connectorConfig.connectorName,
-      connectorVersion: connectorConfig.connectorVersion,
-      connectorMethod: connectorConfig.connectorMethod,
-      params: connectorConfig.params
-    };
-  };
-
-  getPreloadedParty = (): IParty | null => {
-    return parsePartyResponse(this.props.componentModel?.connectorResponse);
-  };
 
   loadData = async () => {
     try {
       this.setState({ loading: true });
 
-      const preloadedParty = this.getPreloadedParty();
-      if (preloadedParty) {
-        this.setState({
-          party: preloadedParty,
-          deposits: [],
-          loans: [],
-          loading: false
-        });
-        return;
-      }
-
-      const partyId = this.getPartyIdFromOpenData()?.trim() || null;
-      const connectorConfig = this.getPartyConnectorConfig();
-
-      if (!partyId && !connectorConfig) {
-        console.warn(
-          "No partyId or dataSource connector found in componentModel; skipping customer load"
-        );
-        this.setState({
-          party: null,
-          deposits: [],
-          loans: [],
-          loading: false
-        });
-        return;
-      }
-
-      const party = await getPartyDetails(partyId, connectorConfig);
+      const [profile, txData] = await Promise.all([
+        getMemberProfile(),
+        getTransactions(this.state.filters, this.state.pagination, this.state.sorting)
+      ]);
 
       this.setState({
-        party,
-        deposits: [],
-        loans: [],
+        profile,
+        transactions: txData.transactions,
+        totalRecords: txData.totalRecords,
         loading: false
       });
     } catch (err) {
@@ -233,384 +99,52 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     }
   };
 
-  renderOverview = (party: IParty | null, deposits: IDeposit[], loans: ILoan[]) => {
-    const membershipDate = party
-      ? this.formatDate(this.getCustomValue(party.customData, "MembershipDate"))
-      : "--";
-
-    return (
-      <HomePageOverview
-        title={party?.name || "Customer Details"}
-        membershipDate={membershipDate}
-        customerId={party?.id || "--"}
-        contactsCount={party?.contacts?.length || 0}
-        documentsCount={party?.identificationDocuments?.length || 0}
-        depositsCount={deposits.length}
-        loansCount={loans.length}
-      />
-    );
+  handleFilterChange = (filters: ITransactionFilters) => {
+    this.setState({ filters });
   };
 
-  renderPartyDetails = (party: IParty) => {
-    const employment = party.employment || [];
-    const memberFields = [
-      ["Member Status", this.getCustomValue(party.customData, "MbrStatus")],
-      ["Member Number", this.getCustomValue(party.customData, "MemberNumber")],
-      ["Membership Date", this.formatDate(this.getCustomValue(party.customData, "MembershipDate"))],
-      ["Locator", this.getCustomValue(party.customData, "Locator")],
-      ["Short Name", this.getCustomValue(party.customData, "ShortName")],
-      ["Primary Type", this.getCustomValue(party.customData, "Type")],
-      ["Is Primary For Type", this.formatBooleanString(this.getCustomValue(party.customData, "IsPrimaryForType"))],
-      ["Is Previous", this.formatBooleanString(this.getCustomValue(party.customData, "IsPrevious"))],
-      ["Mark As Previous", this.formatBooleanString(this.getCustomValue(party.customData, "MarkAsPrevious"))],
-      ["Is Employee", this.formatBooleanString(this.getCustomValue(party.customData, "IsEmployee"))],
-      ["Individual Id", this.getCustomValue(party.customData, "IndividualId")]
-    ];
-
-    return (
-      <div style={panelStyle}>
-        <div style={sectionTitleStyle}>
-          <h2 style={{ margin: 0 }}>Customer Details</h2>
-          <div style={{ color: "#586174", fontSize: "13px" }}>Profile and member information</div>
-        </div>
-
-        <div style={detailGridStyle}>
-          {this.renderField("Customer Id", party.id)}
-          {this.renderField("Party Type", party.type)}
-          {this.renderField("Full Name", party.name)}
-          {this.renderField("First Name", party.firstName)}
-          {this.renderField("Middle Name", party.middleName)}
-          {this.renderField("Last Name", party.lastName)}
-          {this.renderField("Nickname", party.nickname)}
-          {this.renderField("Birth Date", this.formatDate(party.birthdate))}
-        </div>
-
-        <div style={subSectionStyle}>
-          <h3>Member Information</h3>
-          <div style={detailGridStyle}>
-            {memberFields.map(([label, value]) => this.renderField(label, value))}
-          </div>
-        </div>
-
-        <div style={subSectionStyle}>
-          <h3>IRS Information</h3>
-          <div style={detailGridStyle}>
-            {this.renderField("Tax Id", this.maskValue(party.irs?.taxId))}
-            {this.renderField("Tax Id Type", party.irs?.taxIdType)}
-            {this.renderField("Tax Id Encrypted", this.formatBoolean(party.irs?.taxIdEncrypted))}
-            {this.renderField("Reporting Flag", this.formatBoolean(party.irs?.reportingFlag))}
-          </div>
-        </div>
-
-        <div style={subSectionStyle}>
-          <h3>Contacts</h3>
-          {(party.contacts || []).length > 0 ? (
-            <ul style={{ padding: 0, margin: 0 }}>
-              {party.contacts.map((contact, index) => (
-                <li key={contact.contactId || index} style={listItemStyle}>
-                  <strong>{contact.contactType}</strong>
-                  <div>{this.formatContactValue(contact)}</div>
-                  <div style={{ marginTop: "4px", color: "#586174" }}>
-                    Type: {contact.address?.type || contact.phone?.type || contact.email?.type || "--"}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>No contacts available.</p>
-          )}
-        </div>
-
-        <div style={subSectionStyle}>
-          <h3>Identification Documents</h3>
-          {(party.identificationDocuments || []).length > 0 ? (
-            <ul style={{ padding: 0, margin: 0 }}>
-              {party.identificationDocuments.map((doc, index) => (
-                <li key={doc.idDocumentIdentifer || index} style={listItemStyle}>
-                  <div><strong>{doc.idDocumentType?.individualDocument || "Document"}</strong></div>
-                  <div>Document Id: {this.maskValue(doc.documentId)}</div>
-                  <div>Issued By: {doc.idIssuedBy || "--"}</div>
-                  <div>Expiration Date: {this.formatDate(doc.idExpirationDate)}</div>
-                  <div>Verified On: {this.formatDate(doc.idVerifyDateTime)}</div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>No documents available.</p>
-          )}
-        </div>
-
-        <div style={subSectionStyle}>
-          <h3>Employment</h3>
-          {employment.length > 0 ? (
-            <ul style={{ padding: 0, margin: 0 }}>
-              {employment.map((item, index) => (
-                <li key={index} style={listItemStyle}>
-                  <div>Gross Income: {this.formatCurrency(item.employmentIncome?.grossIncomeData?.amount)}</div>
-                  <div>Net Income: {this.formatCurrency(item.employmentIncome?.netIncomeData?.amount)}</div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>No employment details available.</p>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  renderDeposit = (acc: IDeposit, index: number) => {
-    const notes = acc.accountNoteList?.note || [];
-    const holders = acc.depositPartyList?.depositParty || [];
-
-    return (
-      <div key={acc.accountId || index} className="account-card" style={listItemStyle}>
-        <div style={sectionTitleStyle}>
-          <h3 style={{ margin: 0 }}>{acc.description || acc.accountNickName || "Deposit Account"}</h3>
-          <div style={{ color: "#1f5d8b", fontWeight: 700 }}>{this.formatCurrency(acc.availableBalance)}</div>
-        </div>
-        <div style={detailGridStyle}>
-          {this.renderField("Account Id", acc.accountId)}
-          {this.renderField("Nickname", acc.accountNickName)}
-          {this.renderField("Type", acc.type)}
-          {this.renderField("Subtype", acc.subType)}
-          {this.renderField("Open Date", this.formatDate(acc.openDate))}
-          {this.renderField("Branch", acc.branch)}
-          {this.renderField("Actual Balance", this.formatCurrency(acc.actualBalance))}
-          {this.renderField("Available Balance", this.formatCurrency(acc.availableBalance))}
-          {this.renderField("Minimum Balance", this.formatCurrency(acc.minimumBalance))}
-          {this.renderField("Minimum Deposit", this.formatCurrency(acc.minimumDeposit))}
-          {this.renderField("Minimum Withdrawal", this.formatCurrency(acc.minimumWithdrawal))}
-          {this.renderField("Overdraft Tolerance", this.formatCurrency(acc.overdraftTolerance))}
-          {this.renderField("Dividend Rate", this.formatNumber(acc.dividendRate))}
-          {this.renderField("Dividend Type", acc.dividendType)}
-          {this.renderField("Status", acc.depositAccountStatus)}
-          {this.renderField("Substatus", acc.depositAccountSubStatus)}
-          {this.renderField("Transfer From", this.formatBoolean(acc.transferFrom))}
-          {this.renderField("Transfer To", this.formatBoolean(acc.transferTo))}
-          {this.renderField("Bill Pay Allowed", this.formatBooleanString(this.getCustomValue(acc.customData, "cdpAllowBillPay")))}
-        </div>
-
-        <div style={subSectionStyle}>
-          <h4>Relationship</h4>
-          {holders.length > 0 ? (
-            holders.map((holder, holderIndex) => (
-              <div key={holder.depositPartyId || holderIndex}>
-                Party Id: {holder.depositPartyId || "--"}, Qualifier: {holder.depositPartyRelationshipType?.holder?.qualifier || "--"}, Authority: {holder.depositPartyRelationshipType?.holder?.authority || "--"}
-              </div>
-            ))
-          ) : (
-            <div>No relationship details available.</div>
-          )}
-        </div>
-
-        <div style={subSectionStyle}>
-          <h4>Notes</h4>
-          {this.renderNotes(notes)}
-        </div>
-      </div>
-    );
-  };
-
-  renderLoan = (loan: ILoan, index: number) => {
-    const notes = loan.accountNoteList?.note || [];
-    const borrowers = loan.loanPartyList?.loanParty || [];
-    const loanMeta = loan.meta?.loanMeta;
-
-    return (
-      <div key={loan.accountId || index} className="account-card" style={listItemStyle}>
-        <div style={sectionTitleStyle}>
-          <h3 style={{ margin: 0 }}>{loan.description || loan.accountNickName || "Loan Account"}</h3>
-          <div style={{ color: "#8b3b1f", fontWeight: 700 }}>{this.formatCurrency(loan.actualBalance)}</div>
-        </div>
-        <div style={detailGridStyle}>
-          {this.renderField("Account Id", loan.accountId)}
-          {this.renderField("Nickname", loan.accountNickName)}
-          {this.renderField("Type", loan.type)}
-          {this.renderField("Subtype", loan.subType)}
-          {this.renderField("Open Date", this.formatDate(loan.openDate))}
-          {this.renderField("Branch", loan.branch)}
-          {this.renderField("Actual Balance", this.formatCurrency(loan.actualBalance))}
-          {this.renderField("Available Balance", this.formatCurrency(loan.availableBalance))}
-          {this.renderField("Interest Rate", this.formatPercent(loanMeta?.interestRate))}
-          {this.renderField("Minimum Payment", this.formatCurrency(loanMeta?.minimumPayment))}
-          {this.renderField("Last Payment Amount", this.formatCurrency(loan.lastPaymentAmount))}
-          {this.renderField("Scheduled Payment", this.formatCurrency(loan.paymentOption?.paymentAmount))}
-          {this.renderField("Due Date", this.formatDate(loan.paymentOption?.dueDate || loanMeta?.currentDueDate))}
-          {this.renderField("Payoff Balance", this.formatCurrency(loanMeta?.currentPayoffBalance))}
-          {this.renderField("Term", this.formatTerm(loan.term, loan.termType))}
-          {this.renderField("Purpose Code", loan.purposeCode)}
-          {this.renderField("Revolving Credit", this.formatBoolean(loan.isRevolvingLineOfCredit))}
-          {this.renderField("Status", loan.loanAccountStatus)}
-          {this.renderField("Substatus", loan.loanAccountSubStatus)}
-          {this.renderField("Transfer From", this.formatBoolean(loan.transferFrom))}
-          {this.renderField("Transfer To", this.formatBoolean(loan.transferTo))}
-          {this.renderField("Bill Pay Allowed", this.formatBooleanString(this.getCustomValue(loan.customData, "cdpAllowBillPay")))}
-        </div>
-
-        <div style={subSectionStyle}>
-          <h4>Relationship</h4>
-          {borrowers.length > 0 ? (
-            borrowers.map((borrower, borrowerIndex) => (
-              <div key={borrower.loanPartyId || borrowerIndex}>
-                Party Id: {borrower.loanPartyId || "--"}, Qualifier: {borrower.loanPartyRelationshipType?.borrower?.qualifier || "--"}, Authority: {borrower.loanPartyRelationshipType?.borrower?.authority || "--"}
-              </div>
-            ))
-          ) : (
-            <div>No relationship details available.</div>
-          )}
-        </div>
-
-        <div style={subSectionStyle}>
-          <h4>Notes</h4>
-          {this.renderNotes(notes)}
-        </div>
-      </div>
-    );
-  };
-
-  renderNotes = (notes: IAccountNote[]) => {
-    if (!notes.length) {
-      return <div>No notes available.</div>;
-    }
-
-    return (
-      <ul style={{ paddingLeft: "18px", margin: 0 }}>
-        {notes.map((note, index) => (
-          <li key={`${note.noteCode || "note"}-${index}`}>
-            {(note.noteText || []).join(", ") || "Note"}: {note.noteCode || "--"}
-          </li>
-        ))}
-      </ul>
-    );
-  };
-
-  renderField = (label: string, value?: string) => (
-    <div key={`${label}-${value || "empty"}`} style={detailItemStyle}>
-      <div style={{ fontSize: "12px", color: "#586174", marginBottom: "4px" }}>{label}</div>
-      <div>{value && value.trim().length > 0 ? value : "--"}</div>
-    </div>
-  );
-
-  formatContactValue = (contact: IContact) => {
-    if (contact.contactType === "Phone") {
-      return contact.phone?.number || "--";
-    }
-
-    if (contact.contactType === "Email") {
-      return contact.email?.address || "--";
-    }
-
-    if (contact.contactType === "Address") {
-      return [
-        contact.address?.line1,
-        contact.address?.line2,
-        contact.address?.city,
-        contact.address?.stateProvince,
-        contact.address?.postalCode,
-        contact.address?.country
-      ]
-        .filter(Boolean)
-        .join(", ") || "--";
-    }
-
-    return "--";
-  };
-
-  formatCurrency = (amount?: { value: number; currencyCode?: string }) => {
-    if (amount?.value == null) {
-      return "--";
-    }
-
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: amount.currencyCode || "USD"
-    }).format(amount.value);
-  };
-
-  formatDate = (value?: string) => {
-    if (!value) {
-      return "--";
-    }
-
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return value;
-    }
-
-    return parsed.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric"
+  handleApplyFilters = () => {
+    this.setState({ pagination: { ...this.state.pagination, pageNumber: 1 } }, () => {
+      this.loadData();
     });
   };
 
-  formatBoolean = (value?: boolean) => {
-    if (value == null) {
-      return "--";
-    }
-
-    return value ? "Yes" : "No";
+  handleClearFilters = () => {
+    this.setState({ filters: {}, pagination: { ...this.state.pagination, pageNumber: 1 } }, () => {
+      this.loadData();
+    });
   };
 
-  formatBooleanString = (value?: string) => {
-    if (!value) {
-      return "--";
+  handleDownload = async () => {
+    try {
+      this.setState({ downloading: true });
+      await downloadTransactionsReport(this.state.filters);
+      this.setState({ downloading: false });
+    } catch (err) {
+      console.error("Error downloading report", err);
+      this.setState({ downloading: false });
+      this.showToast("Failed to download report", "danger");
     }
-
-    if (value.toLowerCase() === "true" || value === "1") {
-      return "Yes";
-    }
-
-    if (value.toLowerCase() === "false" || value === "0") {
-      return "No";
-    }
-
-    return value;
   };
 
-  formatPercent = (value?: number) => {
-    if (value == null) {
-      return "--";
+  handleNextPage = () => {
+    const { pagination, totalRecords } = this.state;
+    if (pagination.pageNumber * pagination.pageSize < totalRecords) {
+      this.setState(
+        { pagination: { ...pagination, pageNumber: pagination.pageNumber + 1 } },
+        this.loadData
+      );
     }
-
-    return `${value}%`;
   };
 
-  formatNumber = (value?: number) => {
-    if (value == null) {
-      return "--";
+  handlePrevPage = () => {
+    const { pagination } = this.state;
+    if (pagination.pageNumber > 1) {
+      this.setState(
+        { pagination: { ...pagination, pageNumber: pagination.pageNumber - 1 } },
+        this.loadData
+      );
     }
-
-    return `${value}`;
-  };
-
-  formatTerm = (value?: number, unit?: string) => {
-    if (value == null) {
-      return "--";
-    }
-
-    return `${value} ${unit || ""}`.trim();
-  };
-
-  getCustomValue = (customData?: ICustomData, key?: string) => {
-    if (!customData?.valuePair?.length || !key) {
-      return "";
-    }
-
-    return customData.valuePair.find((item) => item.name === key)?.value || "";
-  };
-
-  maskValue = (value?: string, visibleDigits: number = 4) => {
-    if (!value) {
-      return "--";
-    }
-
-    if (value.length <= visibleDigits) {
-      return value;
-    }
-
-    return `${"*".repeat(value.length - visibleDigits)}${value.slice(-visibleDigits)}`;
   };
 
   showToast = (msg: string, color: string) => {
@@ -620,6 +154,136 @@ class HomePage extends Component<IHomeProps, IHomeState> {
   dismissToast = () => {
     this.setState({ openToast: false });
   };
+
+  render() {
+    const { profile, transactions, filters, loading, downloading, pagination, totalRecords } = this.state;
+
+    return (
+      <Page key="home" id="home" className={this.pageClass}>
+        <Toast isOpen={this.state.openToast} className={this.state.toastColor}>
+          <div>{this.state.toastMsg}</div>
+          <button onClick={this.dismissToast} style={{ marginLeft: "15px", color: "#fff", background: "transparent", border: "1px solid #fff", borderRadius: "4px", padding: "4px 8px" }}>OK</button>
+        </Toast>
+
+        <div
+          className="cdp_page_container"
+          ref={this.pageContainer}
+          style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}
+        >
+          {profile && (
+            <MemberProfile 
+              firstName={profile.firstName} 
+              lastName={profile.lastName} 
+              email={profile.email} 
+              phone={profile.phone} 
+            />
+          )}
+
+          <TransactionsFilter 
+            filters={filters} 
+            onFilterChange={this.handleFilterChange} 
+            onApply={this.handleApplyFilters} 
+            onClear={this.handleClearFilters}
+          />
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <h2 style={{ margin: 0 }}>Transactions</h2>
+            <div>
+              <button 
+                onClick={this.loadData} 
+                className="button button--quiet" 
+                style={{ marginRight: "10px" }}
+                disabled={loading}
+              >
+                Refresh Data
+              </button>
+              <button 
+                onClick={this.handleDownload} 
+                className="button button--cta"
+                disabled={downloading}
+                style={{ background: "#2d678f" }}
+              >
+                {downloading ? "Downloading..." : "Download CSV"}
+              </button>
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>Loading data...</div>
+          ) : transactions.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px", background: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
+              <h3 style={{ margin: 0, color: "#6b7280" }}>No transactions found</h3>
+              <p style={{ margin: "8px 0 0", fontSize: "14px", color: "#9ca3af" }}>Try adjusting your filters</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ overflowX: "auto" }}>
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Date</th>
+                      <th style={thStyle}>Description</th>
+                      <th style={thStyle}>Amount</th>
+                      <th style={thStyle}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.map(t => (
+                      <tr key={t.id}>
+                        <td style={tdStyle}>{new Date(t.date).toLocaleDateString()}</td>
+                        <td style={tdStyle}>{t.description}</td>
+                        <td style={tdStyle}>
+                          <span style={{ color: t.type === "Credit" ? "#10b981" : "#ef4444", fontWeight: 500 }}>
+                            {t.type === "Credit" ? "+" : "-"}${t.amount.toFixed(2)}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{
+                            padding: "4px 8px",
+                            borderRadius: "12px",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            backgroundColor: t.status === "Completed" ? "#d1fae5" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
+                            color: t.status === "Completed" ? "#065f46" : t.status === "Pending" ? "#92400e" : "#991b1b"
+                          }}>
+                            {t.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", fontSize: "14px", color: "#6b7280" }}>
+                <div>
+                  Showing {Math.min((pagination.pageNumber - 1) * pagination.pageSize + 1, totalRecords)} to {Math.min(pagination.pageNumber * pagination.pageSize, totalRecords)} of {totalRecords} entries
+                </div>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button 
+                    onClick={this.handlePrevPage} 
+                    disabled={pagination.pageNumber === 1}
+                    style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #d1d5db", background: pagination.pageNumber === 1 ? "#f3f4f6" : "#fff", cursor: pagination.pageNumber === 1 ? "not-allowed" : "pointer" }}
+                  >
+                    Previous
+                  </button>
+                  <button 
+                    onClick={this.handleNextPage} 
+                    disabled={pagination.pageNumber * pagination.pageSize >= totalRecords}
+                    style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #d1d5db", background: pagination.pageNumber * pagination.pageSize >= totalRecords ? "#f3f4f6" : "#fff", cursor: pagination.pageNumber * pagination.pageSize >= totalRecords ? "not-allowed" : "pointer" }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+        </div>
+      </Page>
+    );
+  }
 }
 
 export default HomePage;

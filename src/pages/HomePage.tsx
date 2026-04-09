@@ -1,5 +1,6 @@
 import React, { Component } from "react";
-import { Page, Toast, Button } from "react-onsenui";
+import { Page, Toast } from "react-onsenui";
+import Button from "../components/Button";
 
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
@@ -52,6 +53,7 @@ const tdStyle: React.CSSProperties = {
 };
 
 class HomePage extends Component<IHomeProps, IHomeState> {
+  pageContainer = React.createRef<HTMLDivElement>();
   pageClass = "desktop";
 
   state: IHomeState = {
@@ -161,7 +163,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
       <Page key="home" id="home" className={this.pageClass}>
         <Toast isOpen={this.state.openToast} className={this.state.toastColor}>
           <div>{this.state.toastMsg}</div>
-          <button onClick={this.dismissToast} style={{ marginLeft: "15px", color: "#fff", background: "transparent", border: "1px solid #fff", borderRadius: "4px", padding: "4px 8px" }}>OK</button>
+          <Button variant="toast" onClick={this.dismissToast} style={{ marginLeft: "15px" }}>OK</Button>
         </Toast>
 
         <div
@@ -188,22 +190,21 @@ class HomePage extends Component<IHomeProps, IHomeState> {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h2 style={{ margin: 0 }}>Transactions</h2>
             <div>
-              <button
+              <Button
+                variant="quiet"
                 onClick={this.loadData}
-                className="button button--quiet"
                 style={{ marginRight: "10px" }}
                 disabled={loading}
               >
                 Refresh Data
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="cta"
                 onClick={this.handleDownload}
-                className="button button--cta"
                 disabled={downloading}
-                style={{ background: "#2d678f" }}
               >
                 {downloading ? "Downloading..." : "Download CSV"}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -260,20 +261,20 @@ class HomePage extends Component<IHomeProps, IHomeState> {
                   Showing {Math.min((pagination.pageNumber - 1) * pagination.pageSize + 1, totalRecords)} to {Math.min(pagination.pageNumber * pagination.pageSize, totalRecords)} of {totalRecords} entries
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button
+                  <Button
+                    variant="secondary"
                     onClick={this.handlePrevPage}
                     disabled={pagination.pageNumber === 1}
-                    style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #d1d5db", background: pagination.pageNumber === 1 ? "#f3f4f6" : "#fff", cursor: pagination.pageNumber === 1 ? "not-allowed" : "pointer" }}
                   >
                     Previous
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary"
                     onClick={this.handleNextPage}
                     disabled={pagination.pageNumber * pagination.pageSize >= totalRecords}
-                    style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #d1d5db", background: pagination.pageNumber * pagination.pageSize >= totalRecords ? "#f3f4f6" : "#fff", cursor: pagination.pageNumber * pagination.pageSize >= totalRecords ? "not-allowed" : "pointer" }}
                   >
                     Next
-                  </button>
+                  </Button>
                 </div>
               </div>
             </>

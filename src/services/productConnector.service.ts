@@ -1,5 +1,4 @@
 import { sendRequest } from "./container.svc";
-import { IParty } from "../models/Party.model";
 
 interface IPartyConnectorConfig {
   connectorName?: string;
@@ -16,8 +15,8 @@ const DEFAULT_PARTY_CONNECTOR: Required<
   connectorMethod: "getPartyById"
 };
 
-const partyRequestCache = new Map<string, IParty | null>();
-const inFlightPartyRequests = new Map<string, Promise<IParty | null>>();
+const partyRequestCache = new Map<string, any | null>();
+const inFlightPartyRequests = new Map<string, Promise<any | null>>();
 
 function normalizePartyId(partyId?: string | null): string {
   return typeof partyId === "string" ? partyId.trim() : "";
@@ -101,7 +100,7 @@ function unwrapConnectorBody(raw: any): any | null {
   return null;
 }
 
-function mapPartyFromPayload(data: any): IParty | null {
+function mapPartyFromPayload(data: any): any | null {
   const party =
     data?.partyMessage?.partyList?.party?.[0] ||
     data?.data?.partyMessage?.partyList?.party?.[0];
@@ -130,7 +129,7 @@ function mapPartyFromPayload(data: any): IParty | null {
   };
 }
 
-export function parsePartyResponse(response: any): IParty | null {
+export function parsePartyResponse(response: any): any | null {
   if (!response || response.success === false) {
     return null;
   }
@@ -142,7 +141,7 @@ export function parsePartyResponse(response: any): IParty | null {
 export const getPartyDetails = async (
   partyId?: string | null,
   connectorConfig?: IPartyConnectorConfig | null
-): Promise<IParty | null> => {
+): Promise<any | null> => {
   const connectorName =
     connectorConfig?.connectorName || DEFAULT_PARTY_CONNECTOR.connectorName;
   const connectorVersion =
@@ -314,7 +313,7 @@ export const downloadTransactionsReport = async (filters: ITransactionFilters = 
   return new Promise((resolve) => {
     setTimeout(() => {
       // Simulate creating a fake CSV and triggering a download in browser
-      const csvContent = "data:text/csv;charset=utf-8,id,date,amount,description,status,type\n" 
+      const csvContent = "data:text/csv;charset=utf-8,id,date,amount,description,status,type\n"
         + DUMMY_TRANSACTIONS.map(t => `${t.id},${t.date},${t.amount},${t.description},${t.status},${t.type}`).join("\n");
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");

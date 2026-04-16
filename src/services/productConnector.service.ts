@@ -1,5 +1,4 @@
 import { sendRequest } from "./container.svc";
-import { IParty } from "../models/Party.model";
 
 interface IPartyConnectorConfig {
   connectorName?: string;
@@ -16,8 +15,8 @@ const DEFAULT_PARTY_CONNECTOR: Required<
   connectorMethod: "getPartyById"
 };
 
-const partyRequestCache = new Map<string, IParty | null>();
-const inFlightPartyRequests = new Map<string, Promise<IParty | null>>();
+const partyRequestCache = new Map<string, any | null>();
+const inFlightPartyRequests = new Map<string, Promise<any | null>>();
 
 function normalizePartyId(partyId?: string | null): string {
   return typeof partyId === "string" ? partyId.trim() : "";
@@ -101,7 +100,7 @@ function unwrapConnectorBody(raw: any): any | null {
   return null;
 }
 
-function mapPartyFromPayload(data: any): IParty | null {
+function mapPartyFromPayload(data: any): any | null {
   const party =
     data?.partyMessage?.partyList?.party?.[0] ||
     data?.data?.partyMessage?.partyList?.party?.[0];
@@ -130,7 +129,7 @@ function mapPartyFromPayload(data: any): IParty | null {
   };
 }
 
-export function parsePartyResponse(response: any): IParty | null {
+export function parsePartyResponse(response: any): any | null {
   if (!response || response.success === false) {
     return null;
   }
@@ -142,7 +141,7 @@ export function parsePartyResponse(response: any): IParty | null {
 export const getPartyDetails = async (
   partyId?: string | null,
   connectorConfig?: IPartyConnectorConfig | null
-): Promise<IParty | null> => {
+): Promise<any | null> => {
   const connectorName =
     connectorConfig?.connectorName || DEFAULT_PARTY_CONNECTOR.connectorName;
   const connectorVersion =
@@ -232,98 +231,89 @@ export const getMemberProfile = async (userData?: any): Promise<any> => {
   });
 };
 
-const DUMMY_TRANSACTIONS = [
-  { id: "T001", date: "2023-10-01T10:00:00Z", amount: 150.0, description: "Grocery Store", status: "Completed", type: "Debit" },
-  { id: "T002", date: "2023-10-02T14:30:00Z", amount: 2500.0, description: "Salary Deposit", status: "Completed", type: "Credit" },
-  { id: "T003", date: "2023-10-05T09:15:00Z", amount: 45.5, description: "Coffee Shop", status: "Completed", type: "Debit" },
-  { id: "T004", date: "2023-10-10T18:45:00Z", amount: 120.0, description: "Electric Bill", status: "Pending", type: "Debit" },
-  { id: "T005", date: "2023-10-12T11:20:00Z", amount: 300.0, description: "Friend Transfer", status: "Completed", type: "Credit" },
-  { id: "T006", date: "2023-10-15T08:00:00Z", amount: 50.0, description: "Online Subscription", status: "Failed", type: "Debit" },
-  { id: "T007", date: "2023-10-20T16:10:00Z", amount: 1200.0, description: "Rent Payment", status: "Completed", type: "Debit" },
-  { id: "T008", date: "2023-10-25T13:00:00Z", amount: 200.0, description: "Cash Withdrawal", status: "Completed", type: "Debit" }
-] as any[];
-
-// Dummy method to get transactions with applied filters, pagination, and sorting
 export const getTransactions = async (
   filters: ITransactionFilters = {},
-  pagination: IPagination = { pageNumber: 1, pageSize: 5 },
+  pagination: IPagination = { pageNumber: 1, pageSize: 10 },
   sorting: ISorting = { sortBy: "date", sortDirection: "desc" }
 ): Promise<ITransactionResponse> => {
-  console.log("Calling getTransactions with:", { filters, pagination, sorting });
+  console.log("Calling getTransactions API with:", { filters, pagination, sorting });
 
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      let result = [...DUMMY_TRANSACTIONS];
+  const requestParams: any = {};
 
-      // Filtering logic
-      if (filters.dateFrom) {
-        const fromDate = new Date(filters.dateFrom).getTime();
-        result = result.filter(t => new Date(t.date).getTime() >= fromDate);
-      }
-      if (filters.dateTo) {
-        const toDate = new Date(filters.dateTo).getTime();
-        result = result.filter(t => new Date(t.date).getTime() <= toDate);
-      }
-      if (filters.minAmount !== undefined) {
-        result = result.filter(t => t.amount >= filters.minAmount!);
-      }
-      if (filters.maxAmount !== undefined) {
-        result = result.filter(t => t.amount <= filters.maxAmount!);
-      }
-      if (filters.status) {
-        result = result.filter(t => t.status === filters.status);
-      }
-      if (filters.keyword) {
-        const lowerKeyword = filters.keyword.toLowerCase();
-        result = result.filter(t => t.description.toLowerCase().includes(lowerKeyword));
-      }
+  if (filters.dateFrom) requestParams.fromDate = filters.dateFrom;
+  if (filters.dateTo) requestParams.toDate = filters.dateTo;
+  if (filters.minAmount !== undefined) requestParams.minAmount = filters.minAmount;
+  if (filters.maxAmount !== undefined) requestParams.maxAmount = filters.maxAmount;
+  if (filters.status) requestParams.status = filters.status;
+  if (filters.keyword !== undefined) requestParams.keyword = filters.keyword;
 
-      // Sorting logic
-      result.sort((a, b) => {
-        let aVal = a[sorting.sortBy];
-        let bVal = b[sorting.sortBy];
+  requestParams.sortOrder = sorting.sortDirection === "desc" ? "desc" : "asc";
 
-        if (sorting.sortBy === "date") {
-          aVal = new Date(aVal).getTime();
-          bVal = new Date(bVal).getTime();
-        }
+  requestParams.page = pagination.pageNumber;
+  requestParams.size = pagination.pageSize;
 
-        if (aVal < bVal) return sorting.sortDirection === "asc" ? -1 : 1;
-        if (aVal > bVal) return sorting.sortDirection === "asc" ? 1 : -1;
-        return 0;
-      });
+  try {
+    const resp: any = await sendRequest(
+      "ClaysysPayrails",
+      "1.0",
+      "transaction",
+      requestParams
+    );
 
-      // Pagination logic
-      const totalRecords = result.length;
-      const totalPages = Math.ceil(totalRecords / pagination.pageSize);
-      const startIndex = (pagination.pageNumber - 1) * pagination.pageSize;
-      const paginatedResult = result.slice(startIndex, startIndex + pagination.pageSize);
+    console.log("Transaction full response:", resp);
 
-      resolve({
-        transactions: paginatedResult,
-        totalRecords,
-        totalPages
-      });
-    }, 600);
-  });
+    if (!resp || resp.success === false) {
+      console.warn("Transaction connector returned no usable data:", resp?.message || resp);
+      return { transactions: [], totalRecords: 0, totalPages: 0 };
+    }
+
+    const unwrapped = unwrapConnectorBody(resp?.response ?? resp?.data) ?? resp;
+
+    // Safely check where the transaction objects are located in the nested structure
+    let rawTransactions: any[] = [];
+    let totalRecords = 0;
+
+    if (Array.isArray(unwrapped?.data?.extConnResponse?.data)) {
+      rawTransactions = unwrapped.data.extConnResponse.data;
+      totalRecords = unwrapped.data.extConnResponse.count || rawTransactions.length;
+    } else if (Array.isArray(unwrapped?.extConnResponse?.data)) {
+      rawTransactions = unwrapped.extConnResponse.data;
+      totalRecords = unwrapped.extConnResponse.count || rawTransactions.length;
+    } else if (Array.isArray(unwrapped?.data)) {
+      rawTransactions = unwrapped.data;
+      totalRecords = unwrapped.totalRecords || unwrapped.count || unwrapped.totalCount || rawTransactions.length;
+    } else if (Array.isArray(unwrapped?.transactionList)) {
+      rawTransactions = unwrapped.transactionList;
+      totalRecords = rawTransactions.length;
+    } else if (Array.isArray(unwrapped)) {
+      rawTransactions = unwrapped;
+      totalRecords = rawTransactions.length;
+    } else if (Array.isArray(resp?.data)) {
+      // Fallback if unwrapped removed the array
+      rawTransactions = resp.data;
+      totalRecords = resp.totalRecords || rawTransactions.length;
+    }
+
+    // Map to frontend interface
+    const transactions = rawTransactions.map((item: any) => ({
+      id: item.transactionId || item.id,
+      date: item.dateTimePosted || item.date,
+      amount: parseFloat(item.amount?.value !== undefined ? item.amount.value : (item.amount || "0")),
+      description: item.description,
+      status: item.status,
+      type: item.type
+    }));
+
+    if (totalRecords === 0) totalRecords = transactions.length;
+
+    return {
+      transactions,
+      totalRecords,
+      totalPages: Math.ceil(totalRecords / (pagination.pageSize || 10)) || 1
+    };
+  } catch (error) {
+    console.error("Error fetching transactions:", error);
+    return { transactions: [], totalRecords: 0, totalPages: 0 };
+  }
 };
 
-// Dummy method to download transaction report
-export const downloadTransactionsReport = async (filters: ITransactionFilters = {}): Promise<void> => {
-  console.log("Calling downloadTransactionsReport with filters:", filters);
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate creating a fake CSV and triggering a download in browser
-      const csvContent = "data:text/csv;charset=utf-8,id,date,amount,description,status,type\n" 
-        + DUMMY_TRANSACTIONS.map(t => `${t.id},${t.date},${t.amount},${t.description},${t.status},${t.type}`).join("\n");
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "transactions_report.csv");
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      resolve();
-    }, 800);
-  });
-};

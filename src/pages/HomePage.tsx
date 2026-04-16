@@ -1,11 +1,12 @@
 import React, { Component } from "react";
-import { Page, Toast, Button } from "react-onsenui";
+import { Page, Toast } from "react-onsenui";
+import Button from "../components/Button";
 
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
 
 import { isNativeApp } from "../services/helper.svc";
-import { getMemberProfile, getTransactions, downloadTransactionsReport } from "../services/productConnector.service";
+import { getMemberProfile, getTransactions } from "../services/productConnector.service";
 import MemberProfile from "../components/MemberProfile";
 import TransactionsFilter from "../components/TransactionsFilter";
 import { ITransaction, ITransactionFilters, IPagination, ISorting } from "../models/Transaction.model";
@@ -23,7 +24,6 @@ export interface IHomeState extends IBasePageStateModel {
   toastMsg: string;
   toastColor: string;
   loading: boolean;
-  downloading: boolean;
 }
 
 const tableStyle: React.CSSProperties = {
@@ -52,6 +52,7 @@ const tdStyle: React.CSSProperties = {
 };
 
 class HomePage extends Component<IHomeProps, IHomeState> {
+  pageContainer = React.createRef<HTMLDivElement>();
   pageClass = "desktop";
 
   state: IHomeState = {
@@ -59,14 +60,13 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     profile: null,
     transactions: [],
     filters: {},
-    pagination: { pageNumber: 1, pageSize: 5 },
+    pagination: { pageNumber: 1, pageSize: 10 },
     sorting: { sortBy: "date", sortDirection: "desc" },
     totalRecords: 0,
     openToast: false,
     toastMsg: "",
     toastColor: "danger",
-    loading: true,
-    downloading: false
+    loading: true
   };
 
   componentDidMount() {
@@ -114,18 +114,6 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     });
   };
 
-  handleDownload = async () => {
-    try {
-      this.setState({ downloading: true });
-      await downloadTransactionsReport(this.state.filters);
-      this.setState({ downloading: false });
-    } catch (err) {
-      console.error("Error downloading report", err);
-      this.setState({ downloading: false });
-      this.showToast("Failed to download report", "danger");
-    }
-  };
-
   handleNextPage = () => {
     const { pagination, totalRecords } = this.state;
     if (pagination.pageNumber * pagination.pageSize < totalRecords) {
@@ -155,19 +143,19 @@ class HomePage extends Component<IHomeProps, IHomeState> {
   };
 
   render() {
-    const { profile, transactions, filters, loading, downloading, pagination, totalRecords } = this.state;
+    const { profile, transactions, filters, loading, pagination, totalRecords } = this.state;
 
     return (
       <Page key="home" id="home" className={this.pageClass}>
         <Toast isOpen={this.state.openToast} className={this.state.toastColor}>
           <div>{this.state.toastMsg}</div>
-          <button onClick={this.dismissToast} style={{ marginLeft: "15px", color: "#fff", background: "transparent", border: "1px solid #fff", borderRadius: "4px", padding: "4px 8px" }}>OK</button>
+          <Button variant="toast" onClick={this.dismissToast} style={{ marginLeft: "15px" }}>OK</Button>
         </Toast>
 
         <div
           className="cdp_page_container"
           ref={this.pageContainer}
-          style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}
+          style={{ padding: "20px", paddingBottom: "80px", maxWidth: "900px", margin: "0 auto", overflowY: "auto", height: "100%", boxSizing: "border-box" }}
         >
           {profile && (
             <MemberProfile
@@ -188,22 +176,13 @@ class HomePage extends Component<IHomeProps, IHomeState> {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h2 style={{ margin: 0 }}>Transactions</h2>
             <div>
-              <button
+              <Button
+                variant="quiet"
                 onClick={this.loadData}
-                className="button button--quiet"
-                style={{ marginRight: "10px" }}
                 disabled={loading}
               >
                 Refresh Data
-              </button>
-              <button
-                onClick={this.handleDownload}
-                className="button button--cta"
-                disabled={downloading}
-                style={{ background: "#2d678f" }}
-              >
-                {downloading ? "Downloading..." : "Download CSV"}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -216,11 +195,11 @@ class HomePage extends Component<IHomeProps, IHomeState> {
             </div>
           ) : (
             <>
-              <div style={{ overflowX: "auto" }}>
+              <div>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
-                      <th style={thStyle}>Date</th>
+                     <th style={thStyle}>Date</th>
                       <th style={thStyle}>Description</th>
                       <th style={thStyle}>Amount</th>
                       <th style={thStyle}>Status</th>
@@ -242,8 +221,8 @@ class HomePage extends Component<IHomeProps, IHomeState> {
                             borderRadius: "12px",
                             fontSize: "12px",
                             fontWeight: 600,
-                            backgroundColor: t.status === "Completed" ? "#d1fae5" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
-                            color: t.status === "Completed" ? "#065f46" : t.status === "Pending" ? "#92400e" : "#991b1b"
+                            backgroundColor: (t.status === "Completed" || t.status === "Posted") ? "#d1fae5" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
+                            color: (t.status === "Completed" || t.status === "Posted") ? "#065f46" : t.status === "Pending" ? "#92400e" : "#991b1b"
                           }}>
                             {t.status}
                           </span>
@@ -260,20 +239,18 @@ class HomePage extends Component<IHomeProps, IHomeState> {
                   Showing {Math.min((pagination.pageNumber - 1) * pagination.pageSize + 1, totalRecords)} to {Math.min(pagination.pageNumber * pagination.pageSize, totalRecords)} of {totalRecords} entries
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button
+                  <Button
+                    variant="secondary"
                     onClick={this.handlePrevPage}
-                    disabled={pagination.pageNumber === 1}
-                    style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #d1d5db", background: pagination.pageNumber === 1 ? "#f3f4f6" : "#fff", cursor: pagination.pageNumber === 1 ? "not-allowed" : "pointer" }}
                   >
                     Previous
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary"
                     onClick={this.handleNextPage}
-                    disabled={pagination.pageNumber * pagination.pageSize >= totalRecords}
-                    style={{ padding: "6px 12px", borderRadius: "4px", border: "1px solid #d1d5db", background: pagination.pageNumber * pagination.pageSize >= totalRecords ? "#f3f4f6" : "#fff", cursor: pagination.pageNumber * pagination.pageSize >= totalRecords ? "not-allowed" : "pointer" }}
                   >
                     Next
-                  </button>
+                  </Button>
                 </div>
               </div>
             </>

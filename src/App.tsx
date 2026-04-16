@@ -46,7 +46,7 @@ class App extends Component<any, any> {
     }
   }
 
-  waitForCDPGlobals(timeoutMs = 8000, pollMs = 50): Promise<void> {
+  waitForCDPGlobals(timeoutMs = 2000, pollMs = 50): Promise<void> {
     const started = Date.now();
     return new Promise((resolve) => {
       const tick = () => {

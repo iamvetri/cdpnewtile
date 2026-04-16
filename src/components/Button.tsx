@@ -22,41 +22,41 @@ const Button: React.FC<IButtonProps> = ({ variant = 'primary', style, children, 
 
   switch (variant) {
     case 'primary':
-      baseStyle = { 
-        ...baseStyle, 
-        background: props.disabled ? "#9ca3af" : "#2d678f", 
-        color: "#fff" 
+      baseStyle = {
+        ...baseStyle,
+        background: props.disabled ? "#9ca3af" : "#2d678f",
+        color: "#fff"
       };
       break;
     case 'secondary':
-      baseStyle = { 
-        ...baseStyle, 
-        background: props.disabled ? "#f3f4f6" : "#fff", 
-        color: props.disabled ? "#9ca3af" : "#374151", 
-        border: "1px solid #d1d5db" 
+      baseStyle = {
+        ...baseStyle,
+        background: props.disabled ? "#f3f4f6" : "#fff",
+        color: props.disabled ? "#9ca3af" : "#374151",
+        border: "1px solid #d1d5db"
       };
       break;
     case 'quiet':
-      baseStyle = { 
-        ...baseStyle, 
-        background: "transparent", 
+      baseStyle = {
+        ...baseStyle,
+        background: "transparent",
         color: props.disabled ? "#9ca3af" : "#2d678f",
       };
       break;
     case 'toast':
-      baseStyle = { 
-        ...baseStyle, 
-        background: "transparent", 
-        color: "#fff", 
-        border: "1px solid #fff", 
-        borderRadius: "4px", 
-        padding: "4px 8px" 
+      baseStyle = {
+        ...baseStyle,
+        background: "transparent",
+        color: "#fff",
+        border: "1px solid #fff",
+        borderRadius: "4px",
+        padding: "4px 8px"
       };
       break;
     case 'cta':
-      baseStyle = { 
-        ...baseStyle, 
-        background: props.disabled ? "#9ca3af" : "#2d678f", 
+      baseStyle = {
+        ...baseStyle,
+        background: props.disabled ? "#9ca3af" : "#2d678f",
         color: "#fff",
       };
       break;

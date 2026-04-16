@@ -3,8 +3,8 @@ export interface ITransaction {
   date: string;
   amount: number;
   description: string;
-  status: "Pending" | "Completed" | "Failed";
-  type: "Credit" | "Debit";
+  status: string;
+  type: string;
 }
 
 export interface ITransactionFilters {

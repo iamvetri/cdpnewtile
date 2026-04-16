@@ -275,23 +275,31 @@ export const getTransactions = async (
 
     if (Array.isArray(unwrapped?.data?.extConnResponse?.data)) {
       rawTransactions = unwrapped.data.extConnResponse.data;
-      totalRecords = unwrapped.data.extConnResponse.count || rawTransactions.length;
+      totalRecords = unwrapped.data.extConnResponse.count || unwrapped.data.extConnResponse.totalCount || rawTransactions.length;
     } else if (Array.isArray(unwrapped?.extConnResponse?.data)) {
       rawTransactions = unwrapped.extConnResponse.data;
-      totalRecords = unwrapped.extConnResponse.count || rawTransactions.length;
+      totalRecords = unwrapped.extConnResponse.count || unwrapped.extConnResponse.totalCount || rawTransactions.length;
     } else if (Array.isArray(unwrapped?.data)) {
       rawTransactions = unwrapped.data;
       totalRecords = unwrapped.totalRecords || unwrapped.count || unwrapped.totalCount || rawTransactions.length;
     } else if (Array.isArray(unwrapped?.transactionList)) {
       rawTransactions = unwrapped.transactionList;
-      totalRecords = rawTransactions.length;
+      totalRecords = unwrapped.totalRecords || unwrapped.count || unwrapped.totalCount || rawTransactions.length;
     } else if (Array.isArray(unwrapped)) {
       rawTransactions = unwrapped;
-      totalRecords = rawTransactions.length;
+      totalRecords = unwrapped.length;
     } else if (Array.isArray(resp?.data)) {
       // Fallback if unwrapped removed the array
       rawTransactions = resp.data;
-      totalRecords = resp.totalRecords || rawTransactions.length;
+      totalRecords = resp.totalRecords || resp.count || resp.totalCount || rawTransactions.length;
+    }
+    
+    // Aggressive fallback to find any 'count' in the top levels if still not found
+    if (totalRecords === rawTransactions.length && rawTransactions.length > 0) {
+      const topCount = unwrapped?.count || unwrapped?.totalCount || unwrapped?.totalRecords || unwrapped?.data?.count || resp?.count;
+      if (typeof topCount === 'number' && topCount > totalRecords) {
+        totalRecords = topCount;
+      }
     }
 
     // Map to frontend interface

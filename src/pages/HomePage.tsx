@@ -115,8 +115,8 @@ class HomePage extends Component<IHomeProps, IHomeState> {
   };
 
   handleNextPage = () => {
-    const { pagination, totalRecords } = this.state;
-    if (pagination.pageNumber * pagination.pageSize < totalRecords) {
+    const { pagination, totalRecords, transactions } = this.state;
+    if (transactions.length === pagination.pageSize || (totalRecords > 0 && pagination.pageNumber * pagination.pageSize < totalRecords)) {
       this.setState(
         { pagination: { ...pagination, pageNumber: pagination.pageNumber + 1 } },
         this.loadData
@@ -199,7 +199,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
                 <table style={tableStyle}>
                   <thead>
                     <tr>
-                     <th style={thStyle}>Date</th>
+                      <th style={thStyle}>Date</th>
                       <th style={thStyle}>Description</th>
                       <th style={thStyle}>Amount</th>
                       <th style={thStyle}>Status</th>

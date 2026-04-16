@@ -6,7 +6,7 @@ import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
 
 import { isNativeApp } from "../services/helper.svc";
-import { getMemberProfile, getTransactions, downloadTransactionsReport } from "../services/productConnector.service";
+import { getMemberProfile, getTransactions } from "../services/productConnector.service";
 import MemberProfile from "../components/MemberProfile";
 import TransactionsFilter from "../components/TransactionsFilter";
 import { ITransaction, ITransactionFilters, IPagination, ISorting } from "../models/Transaction.model";
@@ -24,7 +24,6 @@ export interface IHomeState extends IBasePageStateModel {
   toastMsg: string;
   toastColor: string;
   loading: boolean;
-  downloading: boolean;
 }
 
 const tableStyle: React.CSSProperties = {
@@ -61,14 +60,13 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     profile: null,
     transactions: [],
     filters: {},
-    pagination: { pageNumber: 1, pageSize: 5 },
+    pagination: { pageNumber: 1, pageSize: 10 },
     sorting: { sortBy: "date", sortDirection: "desc" },
     totalRecords: 0,
     openToast: false,
     toastMsg: "",
     toastColor: "danger",
-    loading: true,
-    downloading: false
+    loading: true
   };
 
   componentDidMount() {
@@ -116,18 +114,6 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     });
   };
 
-  handleDownload = async () => {
-    try {
-      this.setState({ downloading: true });
-      await downloadTransactionsReport(this.state.filters);
-      this.setState({ downloading: false });
-    } catch (err) {
-      console.error("Error downloading report", err);
-      this.setState({ downloading: false });
-      this.showToast("Failed to download report", "danger");
-    }
-  };
-
   handleNextPage = () => {
     const { pagination, totalRecords } = this.state;
     if (pagination.pageNumber * pagination.pageSize < totalRecords) {
@@ -157,7 +143,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
   };
 
   render() {
-    const { profile, transactions, filters, loading, downloading, pagination, totalRecords } = this.state;
+    const { profile, transactions, filters, loading, pagination, totalRecords } = this.state;
 
     return (
       <Page key="home" id="home" className={this.pageClass}>
@@ -169,7 +155,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
         <div
           className="cdp_page_container"
           ref={this.pageContainer}
-          style={{ padding: "20px", maxWidth: "900px", margin: "0 auto" }}
+          style={{ padding: "20px", paddingBottom: "80px", maxWidth: "900px", margin: "0 auto", overflowY: "auto", height: "100%", boxSizing: "border-box" }}
         >
           {profile && (
             <MemberProfile
@@ -193,17 +179,9 @@ class HomePage extends Component<IHomeProps, IHomeState> {
               <Button
                 variant="quiet"
                 onClick={this.loadData}
-                style={{ marginRight: "10px" }}
                 disabled={loading}
               >
                 Refresh Data
-              </Button>
-              <Button
-                variant="cta"
-                onClick={this.handleDownload}
-                disabled={downloading}
-              >
-                {downloading ? "Downloading..." : "Download CSV"}
               </Button>
             </div>
           </div>
@@ -217,11 +195,11 @@ class HomePage extends Component<IHomeProps, IHomeState> {
             </div>
           ) : (
             <>
-              <div style={{ overflowX: "auto" }}>
+              <div>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
-                      <th style={thStyle}>Date</th>
+                     <th style={thStyle}>Date</th>
                       <th style={thStyle}>Description</th>
                       <th style={thStyle}>Amount</th>
                       <th style={thStyle}>Status</th>
@@ -243,8 +221,8 @@ class HomePage extends Component<IHomeProps, IHomeState> {
                             borderRadius: "12px",
                             fontSize: "12px",
                             fontWeight: 600,
-                            backgroundColor: t.status === "Completed" ? "#d1fae5" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
-                            color: t.status === "Completed" ? "#065f46" : t.status === "Pending" ? "#92400e" : "#991b1b"
+                            backgroundColor: (t.status === "Completed" || t.status === "Posted") ? "#d1fae5" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
+                            color: (t.status === "Completed" || t.status === "Posted") ? "#065f46" : t.status === "Pending" ? "#92400e" : "#991b1b"
                           }}>
                             {t.status}
                           </span>
@@ -264,14 +242,12 @@ class HomePage extends Component<IHomeProps, IHomeState> {
                   <Button
                     variant="secondary"
                     onClick={this.handlePrevPage}
-                    disabled={pagination.pageNumber === 1}
                   >
                     Previous
                   </Button>
                   <Button
                     variant="secondary"
                     onClick={this.handleNextPage}
-                    disabled={pagination.pageNumber * pagination.pageSize >= totalRecords}
                   >
                     Next
                   </Button>

@@ -87,4 +87,18 @@ export const sendRequest = (
   });
 };
 
+<<<<<<< Updated upstream
+=======
+export const getToken = (email: string): Promise<any> => {
+  return sendRequest(
+    "ClaysysPayrails",
+    "1.0",
+    "getToken",
+    {
+      email: email
+    }
+  );
+};
+
+>>>>>>> Stashed changes
 export default container;

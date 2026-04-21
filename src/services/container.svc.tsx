@@ -87,18 +87,21 @@ export const sendRequest = (
   });
 };
 
-<<<<<<< Updated upstream
-=======
 export const getToken = (email: string): Promise<any> => {
   return sendRequest(
     "ClaysysPayrails",
     "1.0",
     "getToken",
     {
-      email: email
+      valuePair: [
+        {
+          email: email
+        },
+        {
+          type: "token"
+        }
+      ]
     }
   );
 };
-
->>>>>>> Stashed changes
 export default container;

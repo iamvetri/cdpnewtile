@@ -10,7 +10,8 @@
         "connectorVersion": "1.0",
         "connectorMethod": "getToken",
         "params": {
-          "email": "gopika.m@claysys.com"
+          "email": "gopika.m@claysys.com",
+          "type": "token"
         }
       }
     }

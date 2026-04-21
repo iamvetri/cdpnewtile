@@ -62,16 +62,16 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     try {
       this.setState({ loading: true, error: undefined });
       const response = await getToken("gopika.m@claysys.com");
-      
+
       if (response && response.success) {
         const tokenData = response.data || response;
-        
+
         // Store token in state
         this.setState({
           token: tokenData,
           loading: false
         });
-        
+
         // Post token to iframe when ready (iframe will handle setting cookies)
         setTimeout(() => {
           this.postTokenToIframe(tokenData);
@@ -92,7 +92,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
   onIframeLoad = () => {
     this.setState({ iframeLoaded: true });
-    
+
     // Send token to iframe when it loads
     if (this.state.token) {
       this.postTokenToIframe(this.state.token);
@@ -101,14 +101,14 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
   render() {
     const { token, loading, error, iframeLoaded } = this.state;
-    const iframeUrl = "https://devpatientapp.bitcure.com/AppSite/BitCureApp";
+    const iframeUrl = "https://devpatientapp.bitcure.com/impersonate/authenticate.html?token=FFE48129-1262-4400-9838-21ADF7DF8557&guid=75405824-63c3-4fd1-bc76-c0d7b6fa2f60";
 
     return (
       <Page key="home" id="home" className={this.pageClass} style={{ background: "#F8F9FB", height: "100%" }}>
         <div className="home-page-container">
           <div style={{ padding: "20px", textAlign: "center" }}>
             <h1>Token Request & Iframe Integration</h1>
-            
+
             {loading && (
               <div style={{ marginTop: "20px" }}>
                 <p>Loading Token...</p>

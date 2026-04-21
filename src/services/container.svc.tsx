@@ -95,10 +95,12 @@ export const getToken = (email: string): Promise<any> => {
     {
       valuePair: [
         {
-          email: email
+          name: "email",
+          value: email
         },
         {
-          type: "token"
+          name: "type",
+          value: "token"
         }
       ]
     }

@@ -101,7 +101,13 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
   render() {
     const { token, loading, error, iframeLoaded } = this.state;
-    const iframeUrl = "https://devpatientapp.bitcure.com/impersonate/authenticate.html?token=FFE48129-1262-4400-9838-21ADF7DF8557&guid=75405824-63c3-4fd1-bc76-c0d7b6fa2f60";
+
+    // Extract the token string depending on how the response is structured
+    const tokenString = typeof token === 'string'
+      ? token
+      : (token?.data || token?.response?.data);
+
+    const iframeUrl = `https://devpatientapp.bitcure.com/impersonate/authenticate.html?token=${tokenString}`;
 
     return (
       <Page key="home" id="home" className={this.pageClass} style={{ background: "#F8F9FB", height: "100%" }}>

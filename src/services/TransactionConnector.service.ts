@@ -275,31 +275,23 @@ export const getTransactions = async (
 
     if (Array.isArray(unwrapped?.data?.extConnResponse?.data)) {
       rawTransactions = unwrapped.data.extConnResponse.data;
-      totalRecords = unwrapped.data.extConnResponse.count || unwrapped.data.extConnResponse.totalCount || rawTransactions.length;
+      totalRecords = unwrapped.data.extConnResponse.totalCount || unwrapped.data.extConnResponse.count || 0;
     } else if (Array.isArray(unwrapped?.extConnResponse?.data)) {
       rawTransactions = unwrapped.extConnResponse.data;
-      totalRecords = unwrapped.extConnResponse.count || unwrapped.extConnResponse.totalCount || rawTransactions.length;
+      totalRecords = unwrapped.extConnResponse.totalCount || unwrapped.extConnResponse.count || 0;
     } else if (Array.isArray(unwrapped?.data)) {
       rawTransactions = unwrapped.data;
-      totalRecords = unwrapped.totalRecords || unwrapped.count || unwrapped.totalCount || rawTransactions.length;
+      totalRecords = unwrapped.totalRecords || unwrapped.totalCount || unwrapped.count || 0;
     } else if (Array.isArray(unwrapped?.transactionList)) {
       rawTransactions = unwrapped.transactionList;
-      totalRecords = unwrapped.totalRecords || unwrapped.count || unwrapped.totalCount || rawTransactions.length;
+      totalRecords = unwrapped.totalCount || unwrapped.totalRecords || 0;
     } else if (Array.isArray(unwrapped)) {
       rawTransactions = unwrapped;
-      totalRecords = unwrapped.length;
+      totalRecords = 0; // Cannot determine total from raw array, let backend handle it
     } else if (Array.isArray(resp?.data)) {
       // Fallback if unwrapped removed the array
       rawTransactions = resp.data;
-      totalRecords = resp.totalRecords || resp.count || resp.totalCount || rawTransactions.length;
-    }
-    
-    // Aggressive fallback to find any 'count' in the top levels if still not found
-    if (totalRecords === rawTransactions.length && rawTransactions.length > 0) {
-      const topCount = unwrapped?.count || unwrapped?.totalCount || unwrapped?.totalRecords || unwrapped?.data?.count || resp?.count;
-      if (typeof topCount === 'number' && topCount > totalRecords) {
-        totalRecords = topCount;
-      }
+      totalRecords = resp.totalRecords || resp.totalCount || 0;
     }
 
     // Map to frontend interface
@@ -312,12 +304,28 @@ export const getTransactions = async (
       type: item.type
     }));
 
-    if (totalRecords === 0) totalRecords = transactions.length;
+    // If totalRecords still unknown and this page is empty, mark as unknown
+    // If totalRecords still unknown but we have results:
+    if (totalRecords === 0) {
+      if (transactions.length > 0) {
+        // If we got fewer results than pageSize, this is the last page
+        if (transactions.length < pagination.pageSize) {
+          totalRecords = (pagination.pageNumber - 1) * pagination.pageSize + transactions.length;
+        } else {
+          // If we got a full page, we don't know the true total - use -1 as "unknown"
+          totalRecords = -1;
+        }
+      } else {
+        // Empty page - check if it's beyond known range or just no results
+        // If previous page would have filled pageSize, this page shouldn't exist
+        totalRecords = -1;
+      }
+    }
 
     return {
       transactions,
-      totalRecords,
-      totalPages: Math.ceil(totalRecords / (pagination.pageSize || 10)) || 1
+      totalRecords: totalRecords > 0 ? totalRecords : -1, // -1 means unknown/possibly more pages
+      totalPages: totalRecords > 0 ? Math.ceil(totalRecords / (pagination.pageSize || 10)) : -1
     };
   } catch (error) {
     console.error("Error fetching transactions:", error);

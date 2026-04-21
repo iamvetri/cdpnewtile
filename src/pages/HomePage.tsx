@@ -6,7 +6,7 @@ import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
 
 import { isNativeApp } from "../services/helper.svc";
-import { getMemberProfile, getTransactions } from "../services/productConnector.service";
+import { getMemberProfile, getTransactions } from "../services/TransactionConnector.service";
 import MemberProfile from "../components/MemberProfile";
 import TransactionsFilter from "../components/TransactionsFilter";
 import { ITransaction, ITransactionFilters, IPagination, ISorting } from "../models/Transaction.model";
@@ -114,13 +114,27 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     });
   };
 
-  handleNextPage = () => {
+handleNextPage = () => {
     const { pagination, totalRecords, transactions } = this.state;
-    if (transactions.length === pagination.pageSize || (totalRecords > 0 && pagination.pageNumber * pagination.pageSize < totalRecords)) {
+    
+    // Don't go to next page if current page is empty
+    if (transactions.length === 0) return;
+    
+    // If totalRecords is unknown (-1), allow next if we got a full page
+    if (totalRecords === -1) {
+      if (transactions.length < pagination.pageSize) return; // Last page
       this.setState(
         { pagination: { ...pagination, pageNumber: pagination.pageNumber + 1 } },
         this.loadData
       );
+    } else {
+      // Known total - check if there's a next page
+      if (pagination.pageNumber * pagination.pageSize < totalRecords) {
+        this.setState(
+          { pagination: { ...pagination, pageNumber: pagination.pageNumber + 1 } },
+          this.loadData
+        );
+      }
     }
   };
 
@@ -191,70 +205,76 @@ class HomePage extends Component<IHomeProps, IHomeState> {
           ) : transactions.length === 0 ? (
             <div style={{ textAlign: "center", padding: "40px", background: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
               <h3 style={{ margin: 0, color: "#6b7280" }}>No transactions found</h3>
-              <p style={{ margin: "8px 0 0", fontSize: "14px", color: "#9ca3af" }}>Try adjusting your filters</p>
+              <p style={{ margin: "8px 0 0", fontSize: "14px", color: "#9ca3af" }}>Try adjusting your filters or go back to the previous page</p>
             </div>
           ) : (
-            <>
-              <div>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Date</th>
-                      <th style={thStyle}>Description</th>
-                      <th style={thStyle}>Amount</th>
-                      <th style={thStyle}>Status</th>
+            <div>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                   <th style={thStyle}>Date</th>
+                    <th style={thStyle}>Description</th>
+                    <th style={thStyle}>Amount</th>
+                    <th style={thStyle}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map(t => (
+                    <tr key={t.id}>
+                      <td style={tdStyle}>{new Date(t.date).toLocaleDateString()}</td>
+                      <td style={tdStyle}>{t.description}</td>
+                      <td style={tdStyle}>
+                        <span style={{ color: t.type === "Credit" ? "#10b981" : "#ef4444", fontWeight: 500 }}>
+                          {t.type === "Credit" ? "+" : "-"}${t.amount.toFixed(2)}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>
+                        <span style={{
+                          padding: "4px 8px",
+                          borderRadius: "12px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          backgroundColor: (t.status === "Completed" || t.status === "Posted") ? "#d1fae5" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
+                          color: (t.status === "Completed" || t.status === "Posted") ? "#065f46" : t.status === "Pending" ? "#92400e" : "#991b1b"
+                        }}>
+                          {t.status}
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {transactions.map(t => (
-                      <tr key={t.id}>
-                        <td style={tdStyle}>{new Date(t.date).toLocaleDateString()}</td>
-                        <td style={tdStyle}>{t.description}</td>
-                        <td style={tdStyle}>
-                          <span style={{ color: t.type === "Credit" ? "#10b981" : "#ef4444", fontWeight: 500 }}>
-                            {t.type === "Credit" ? "+" : "-"}${t.amount.toFixed(2)}
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          <span style={{
-                            padding: "4px 8px",
-                            borderRadius: "12px",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            backgroundColor: (t.status === "Completed" || t.status === "Posted") ? "#d1fae5" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
-                            color: (t.status === "Completed" || t.status === "Posted") ? "#065f46" : t.status === "Pending" ? "#92400e" : "#991b1b"
-                          }}>
-                            {t.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination Controls */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", fontSize: "14px", color: "#6b7280" }}>
-                <div>
-                  Showing {Math.min((pagination.pageNumber - 1) * pagination.pageSize + 1, totalRecords)} to {Math.min(pagination.pageNumber * pagination.pageSize, totalRecords)} of {totalRecords} entries
-                </div>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <Button
-                    variant="secondary"
-                    onClick={this.handlePrevPage}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={this.handleNextPage}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
+
+          {/* Pagination Controls - Always visible */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", fontSize: "14px", color: "#6b7280" }}>
+            <div>
+              {transactions.length > 0 ? (
+                <span>
+                  Showing :{(pagination.pageNumber - 1) * pagination.pageSize + 1} - {(pagination.pageNumber - 1) * pagination.pageSize + transactions.length}
+                </span>
+              ) : (
+                <span>Page {pagination.pageNumber}</span>
+              )}
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <Button
+                variant="secondary"
+                onClick={this.handlePrevPage}
+                disabled={pagination.pageNumber === 1}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={this.handleNextPage}
+                disabled={transactions.length === 0 || (totalRecords > 0 && pagination.pageNumber * pagination.pageSize > totalRecords) || (totalRecords === -1 && transactions.length < pagination.pageSize)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
 
         </div>
       </Page>

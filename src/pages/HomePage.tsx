@@ -3,24 +3,26 @@ import { Page } from "react-onsenui";
 
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
-import { getToken } from "../services/container.svc";
+import { getToken, getUser } from "../services/container.svc";
 import LoadingScreen from "../components/LoadingScreen";
 
 export interface IHomeProps extends IBasePropsModel { }
 export interface IHomeState extends IBasePageStateModel {
   iframeUrl?: string;
-  /** true = still fetching the token (shows LoadingScreen overlay) */
   loading: boolean;
   error?: string;
 }
 
-const BASE_IFRAME_URL = "https://devpatientapp.bitcure.com/impersonate/authenticate.html";
-const HARDCODED_GUID = "75405824-63c3-4fd1-bc76-c0d7b6fa2f60";
+/** Final app URL — hdnId and hdnPatientId come from the validateUser response */
+const APP_URL = "https://devpatientapp.bitcure.com/AppSite/BitCureApp";
 
 class HomePage extends Component<IHomeProps, IHomeState> {
   pageContainer = React.createRef<HTMLDivElement>();
   pageClass = "desktop";
   iframeRef = React.createRef<HTMLIFrameElement>();
+
+  /** Cookie data from the response — sent to iframe via postMessage once it loads */
+  private cookieData: any[] = [];
 
   state: IHomeState = {
     componentModel: undefined as any,
@@ -35,51 +37,173 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     this.fetchToken();
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Extract the real payload from the CDP connector response.
+  //
+  // Observed console shape (22-Apr-2026 screenshot):
+  //   {
+  //     response: {                       ← CDP wrapper
+  //       success: true,
+  //       message: "",
+  //       data: {                         ← connector envelope
+  //         statusCode: 200,
+  //         message: "Success",
+  //         data: {                       ← ★ real payload
+  //           userId: 50387,
+  //           patientId: 22210,
+  //           access_token: "...",
+  //           cookie: [ { name, value, domain, ... } ]
+  //         }
+  //       }
+  //     }
+  //   }
+  // ─────────────────────────────────────────────────────────────────────────
+  private extractPayload(raw: any): any | null {
+    if (!raw) return null;
+
+    const body = raw?.response ?? raw;
+
+    // Path 1: body.data.data (seen in screenshot — most common)
+    const envelope = body?.data;
+    if (envelope?.data && typeof envelope.data === "object") {
+      if (envelope.statusCode === 200 || envelope.message === "Success") {
+        console.log("[extractPayload] ✓ using body.data.data");
+        return envelope.data;
+      }
+    }
+
+    // Path 2: body.data has access_token directly
+    if (envelope?.access_token) {
+      console.log("[extractPayload] ✓ using body.data");
+      return envelope;
+    }
+
+    // Path 3: body has access_token directly
+    if (body?.access_token) {
+      console.log("[extractPayload] ✓ using body");
+      return body;
+    }
+
+    console.warn("[extractPayload] ✗ No matching path. body =", body);
+    return null;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Store the _AFAUTH_2027 cookie so the iframe can authenticate.
+  //
+  // Strategy:
+  //   1. Set via document.cookie on the parent (works if domains align)
+  //   2. After iframe loads, send cookie via postMessage so the iframe-side
+  //      page can set it in its own domain context
+  // ─────────────────────────────────────────────────────────────────────────
+  private storeCookies(cookies: any[]): void {
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      console.warn("[storeCookies] No cookies in response");
+      return;
+    }
+
+    for (const c of cookies) {
+      const name = c.name || c.Name;
+      const value = c.value || c.Value;
+      const domain = c.domain || c.Domain || "";
+      const path = c.path || c.Path || "/";
+      const secure = c.secure ?? c.Secure ?? true;
+
+      if (!name || !value) continue;
+
+      // Attempt 1: Set on the parent page via document.cookie
+      let cookieStr = `${name}=${value}; path=${path}; SameSite=None`;
+      if (secure) cookieStr += "; Secure";
+      // Note: cannot set httpOnly via JS — omitting it intentionally
+      try {
+        document.cookie = cookieStr;
+        console.log(`[storeCookies] Set via document.cookie: ${name} (domain hint: ${domain})`);
+      } catch (err) {
+        console.warn(`[storeCookies] document.cookie failed for ${name}:`, err);
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // After the iframe loads, send the cookie data via postMessage so the
+  // iframe-side page (on devpatientapp.bitcure.com) can set the cookie
+  // in its own domain context using document.cookie.
+  // ─────────────────────────────────────────────────────────────────────────
+  handleIframeLoad = () => {
+    if (this.cookieData.length > 0 && this.iframeRef.current?.contentWindow) {
+      const message = {
+        type: "SET_COOKIE",
+        cookies: this.cookieData,
+      };
+      this.iframeRef.current.contentWindow.postMessage(
+        JSON.stringify(message),
+        "https://devpatientapp.bitcure.com"
+      );
+      console.log("[postMessage] Sent SET_COOKIE to iframe:", message);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
   fetchToken = async () => {
     try {
       this.setState({ loading: true, error: undefined });
 
-      const response = await getToken("gopika.m@claysys.com");
-
-      console.log("Full getToken response:", JSON.stringify(response, null, 2));
-
-      const responseBody = response?.response ?? response;
-      const isSuccess = responseBody?.success === true;
-      const outerData = responseBody?.data;
-
-      if (isSuccess && outerData) {
-        let token = "";
-
-        if (typeof outerData === "string" && outerData.length > 0) {
-          const ampIdx = outerData.indexOf("&");
-          token = ampIdx !== -1 ? outerData.substring(0, ampIdx) : outerData;
-
-        } else if (outerData && typeof outerData === "object") {
-          const inner = outerData.data;
-          if (typeof inner === "string" && inner.length > 0) {
-            const ampIdx = inner.indexOf("&");
-            token = ampIdx !== -1 ? inner.substring(0, ampIdx) : inner;
-          } else {
-            token = outerData.token || outerData.access_token || outerData.tokenValue || "";
-          }
+      // ── Step 1: resolve email via getUser() ───────────────────────────
+      let email = "";
+      try {
+        const userResult = await getUser();
+        console.log("getUser response:", JSON.stringify(userResult, null, 2));
+        const emails = userResult?.data?.memberInfo?.emailAddresses;
+        if (Array.isArray(emails) && emails.length > 0) {
+          email = emails[0].emailAddress || "";
         }
-
-        if (token) {
-          const iframeUrl = `${BASE_IFRAME_URL}?token=${token}&guid=${HARDCODED_GUID}`;
-          console.log("Iframe URL constructed:", iframeUrl);
-          // Hide LoadingScreen — iframe is already mounted and will navigate
-          this.setState({ iframeUrl, loading: false });
-        } else {
-          this.setState({ error: "Token value was empty in response", loading: false });
-        }
-      } else {
-        const errorMsg =
-          responseBody?.message ||
-          response?.message ||
-          "Failed to get token. Check console for full response.";
-        console.warn("Token request failed. Response:", response);
-        this.setState({ error: errorMsg, loading: false });
+      } catch (userErr: any) {
+        console.warn("getUser failed, proceeding with empty email:", userErr);
       }
+      console.log("Email resolved for getToken:", email);
+
+      // ── Step 2: call getToken (type=validateUser) ─────────────────────
+      const response = await getToken(email);
+      console.log("getToken raw response:", JSON.stringify(response, null, 2));
+
+      const payload = this.extractPayload(response);
+
+      if (!payload) {
+        this.setState({
+          error: "Could not parse token response — check console.",
+          loading: false,
+        });
+        return;
+      }
+
+      const accessToken: string = payload.access_token || payload.token || "";
+      const userId: number      = payload.userId    || payload.UserId    || 0;
+      const patientId: number   = payload.patientId || payload.PatientId || 0;
+      const cookies: any[]      = payload.cookie    || payload.cookies   || [];
+
+      console.log("[validateUser] accessToken :", accessToken ? "✓ present" : "✗ missing");
+      console.log("[validateUser] userId      :", userId);
+      console.log("[validateUser] patientId   :", patientId);
+      console.log("[validateUser] cookies     :", cookies.length, "cookie(s)");
+
+      if (!accessToken) {
+        this.setState({
+          error: "access_token missing in validateUser response.",
+          loading: false,
+        });
+        return;
+      }
+
+      // ── Step 3: store the cookies from the response ───────────────────
+      this.cookieData = cookies;
+      this.storeCookies(cookies);
+
+      // ── Step 4: build iframe URL and load ──────────────────────────────
+      const iframeUrl = `${APP_URL}?hdnId=${userId}&hdnPatientId=${patientId}`;
+      console.log("[iframe] URL:", iframeUrl);
+
+      this.setState({ iframeUrl, loading: false });
+
     } catch (err: any) {
       console.error("fetchToken error:", err);
       this.setState({
@@ -89,10 +213,11 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
   render() {
     const { iframeUrl, loading, error } = this.state;
 
-    /* ── Error state ── */
+    /* ── Error state ───────────────────────────────────────────────────── */
     if (error) {
       return (
         <Page key="home" id="home" className={this.pageClass}>
@@ -112,25 +237,17 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     return (
       <Page key="home" id="home" className={this.pageClass} style={{ margin: 0, padding: 0 }}>
 
-        {/*
-         * LoadingScreen overlay — shown only while the main project is fetching
-         * the auth token (loading === true). It sits on top of everything via
-         * position:fixed + zIndex, and disappears the moment the token arrives.
-         * The iframe is NOT shown during this phase.
-         */}
+        {/* Loading overlay while fetching token */}
         {loading && <LoadingScreen />}
 
-        {/*
-         * Iframe — rendered only once we have the token URL.
-         * It is NOT pre-mounted while loading; it appears immediately after
-         * the token is ready so there is no second blank wait.
-         */}
+        {/* AppSite iframe — cookie already stored before loading */}
         {!loading && iframeUrl && (
           <iframe
             ref={this.iframeRef}
             src={iframeUrl}
             title="BitCure App"
-            sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups"
+            onLoad={this.handleIframeLoad}
+            sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups allow-popups-to-escape-sandbox"
             style={iframeFullStyle}
           />
         )}
@@ -139,7 +256,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
   }
 }
 
-/* ─── Styles ─────────────────────────────────────────────── */
+/* ─── Styles ──────────────────────────────────────────────────────────── */
 
 const splashStyle: React.CSSProperties = {
   display: "flex",

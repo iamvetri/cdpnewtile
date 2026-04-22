@@ -93,16 +93,8 @@ export const getToken = (email: string): Promise<any> => {
     "1.0",
     "getToken",
     {
-      valuePair: [
-        {
-          name: "email",
-          value: email
-        },
-        {
-          name: "type",
-          value: "token"
-        }
-      ]
+      email: email,
+      type: "token"
     }
   );
 };

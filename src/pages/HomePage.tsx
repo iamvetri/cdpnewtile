@@ -5,16 +5,16 @@ import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
 import { getToken } from "../services/container.svc";
 
-// Import the styling for our simple home page
-
-
 export interface IHomeProps extends IBasePropsModel { }
 export interface IHomeState extends IBasePageStateModel {
-  token?: any;
+  iframeUrl?: string;
   loading: boolean;
   error?: string;
   iframeLoaded: boolean;
 }
+
+const BASE_IFRAME_URL = "https://devpatientapp.bitcure.com/impersonate/authenticate.html";
+const HARDCODED_GUID = "75405824-63c3-4fd1-bc76-c0d7b6fa2f60";
 
 class HomePage extends Component<IHomeProps, IHomeState> {
   pageContainer = React.createRef<HTMLDivElement>();
@@ -25,7 +25,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     componentModel: undefined as any,
     openToast: false,
     toastMsg: "",
-    token: undefined,
+    iframeUrl: undefined,
     loading: true,
     error: undefined,
     iframeLoaded: false
@@ -35,56 +35,75 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     this.fetchToken();
   }
 
-  // Post token to iframe via postMessage (for cross-domain communication)
-  postTokenToIframe = (tokenData: any) => {
-    try {
-      if (this.iframeRef.current && this.iframeRef.current.contentWindow) {
-        // Use '*' for cross-origin postMessage
-        this.iframeRef.current.contentWindow.postMessage(
-          {
-            type: "AUTH_TOKEN",
-            token: tokenData.response?.data?.access_token,
-            tokenType: tokenData.response?.data?.token_type,
-            expiresIn: tokenData.response?.data?.expires_in,
-            refreshToken: tokenData.response?.data?.refresh_token,
-            cookies: tokenData.response?.data?.cookie
-          },
-          "*"
-        );
-        console.log("Token sent to iframe via postMessage");
-      }
-    } catch (err) {
-      console.error("Error posting token to iframe:", err);
-    }
-  };
-
   fetchToken = async () => {
     try {
-      this.setState({ loading: true, error: undefined });
+      this.setState({ loading: true, error: undefined, iframeLoaded: false });
+
       const response = await getToken("gopika.m@claysys.com");
 
-      if (response && response.success) {
-        const tokenData = response.data || response;
+      // Full raw response logged for debugging
+      console.log("Full getToken response:", JSON.stringify(response, null, 2));
 
-        // Store token in state
-        this.setState({
-          token: tokenData,
-          loading: false
-        });
+      /*
+       * Actual API response shape (top-level, no .response wrapper):
+       *   {
+       *     success: true,
+       *     message: "",
+       *     data: {
+       *       statusCode: 200,
+       *       data: "TOKEN_VALUE",   <-- actual token is here
+       *       error: null
+       *     }
+       *   }
+       *
+       * The guid is hardcoded. Final iframe URL:
+       *   https://devpatientapp.bitcure.com/impersonate/authenticate.html?token=<TOKEN>&guid=<HARDCODED_GUID>
+       */
 
-        // Post token to iframe when ready (iframe will handle setting cookies)
-        setTimeout(() => {
-          this.postTokenToIframe(tokenData);
-        }, 1000);
+      // Support both wrapped ({ response: {...} }) and unwrapped ({ success, data }) shapes
+      const responseBody = response?.response ?? response;
+      const isSuccess = responseBody?.success === true;
+      const outerData = responseBody?.data;
+
+      if (isSuccess && outerData) {
+        let token = "";
+
+        if (typeof outerData === "string" && outerData.length > 0) {
+          // Plain string token — strip any trailing &... params
+          const ampIdx = outerData.indexOf("&");
+          token = ampIdx !== -1 ? outerData.substring(0, ampIdx) : outerData;
+
+        } else if (outerData && typeof outerData === "object") {
+          // Nested shape: { statusCode, data: "TOKEN", error }
+          const inner = outerData.data;
+          if (typeof inner === "string" && inner.length > 0) {
+            const ampIdx = inner.indexOf("&");
+            token = ampIdx !== -1 ? inner.substring(0, ampIdx) : inner;
+          } else {
+            // Fallback: common token field names in the object itself
+            token = outerData.token || outerData.access_token || outerData.tokenValue || "";
+          }
+        }
+
+        if (token) {
+          const iframeUrl = `${BASE_IFRAME_URL}?token=${token}&guid=${HARDCODED_GUID}`;
+          console.log("Iframe URL constructed:", iframeUrl);
+          this.setState({ iframeUrl, loading: false });
+        } else {
+          this.setState({ error: "Token value was empty in response", loading: false });
+        }
       } else {
-        this.setState({
-          error: response?.message || "Failed to get token",
-          loading: false
-        });
+        const errorMsg =
+          responseBody?.message ||
+          response?.message ||
+          "Failed to get token. Check console for full response.";
+        console.warn("Token request failed. Response:", response);
+        this.setState({ error: errorMsg, loading: false });
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error("fetchToken error:", err);
       this.setState({
-        error: err instanceof Error ? err.message : "An error occurred",
+        error: err?.message || "An error occurred while fetching token",
         loading: false
       });
     }
@@ -92,75 +111,75 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
   onIframeLoad = () => {
     this.setState({ iframeLoaded: true });
-
-    // Send token to iframe when it loads
-    if (this.state.token) {
-      this.postTokenToIframe(this.state.token);
-    }
   };
 
   render() {
-    const { token, loading, error, iframeLoaded } = this.state;
-
-    // Extract the token string depending on how the response is structured
-    const tokenString = typeof token === 'string'
-      ? token
-      : (token?.data || token?.response?.data);
-
-    const iframeUrl = `https://devpatientapp.bitcure.com/impersonate/authenticate.html?token=${tokenString}`;
+    const { iframeUrl, loading, error, iframeLoaded } = this.state;
 
     return (
       <Page key="home" id="home" className={this.pageClass} style={{ background: "#F8F9FB", height: "100%" }}>
         <div className="home-page-container">
           <div style={{ padding: "20px", textAlign: "center" }}>
-            <h1>Token Request & Iframe Integration</h1>
+            <h1>Token Request &amp; Iframe Integration</h1>
 
-            {loading && (
-              <div style={{ marginTop: "20px" }}>
-                <p>Loading Token...</p>
-              </div>
-            )}
-
-            {error && (
-              <div style={{ marginTop: "20px", color: "red" }}>
-                <p>Error: {error}</p>
-                <button onClick={this.fetchToken} style={{ marginTop: "10px", padding: "10px 20px" }}>
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {token && !loading && (
-              <>
-                <div style={{ marginTop: "20px", backgroundColor: "#e8f5e9", padding: "20px", borderRadius: "5px" }}>
-                  <p><strong>Token Retrieved Successfully</strong></p>
-                  <pre style={{ textAlign: "left", overflow: "auto", maxHeight: "200px", fontSize: "12px" }}>
-                    {JSON.stringify(token.response?.data, null, 2)}
-                  </pre>
+            {/* Status bar */}
+            <div style={{ marginBottom: "16px" }}>
+              {loading && (
+                <p style={{ color: "#555" }}>⏳ Fetching token...</p>
+              )}
+              {error && (
+                <div style={{ color: "red" }}>
+                  <p>❌ Error: {error}</p>
+                  <button
+                    onClick={this.fetchToken}
+                    style={{ marginTop: "8px", padding: "8px 20px", cursor: "pointer" }}
+                  >
+                    Retry
+                  </button>
                 </div>
+              )}
+              {iframeUrl && !loading && (
+                <p style={{ color: "green" }}>
+                  ✅ Token retrieved — {iframeLoaded ? "Iframe loaded" : "Loading iframe..."}
+                </p>
+              )}
+            </div>
 
-                <div style={{ marginTop: "30px" }}>
-                  <h2>BitCure Application</h2>
-                  <p style={{ color: "#666", marginBottom: "20px" }}>
-                    {iframeLoaded ? "✓ Iframe Loaded - Token shared via postMessage" : "Loading iframe..."}
-                  </p>
-                  <iframe
-                    ref={this.iframeRef}
-                    src={iframeUrl}
-                    title="BitCure App"
-                    style={{
-                      width: "100%",
-                      height: "700px",
-                      border: "1px solid #ddd",
-                      borderRadius: "5px",
-                      boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-                    }}
-                    onLoad={this.onIframeLoad}
-                    sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups"
-                  />
-                </div>
-              </>
-            )}
+            {/* Always show the iframe area; src is set only once token is ready */}
+            <div style={{ marginTop: "10px" }}>
+              {iframeUrl ? (
+                <iframe
+                  ref={this.iframeRef}
+                  src={iframeUrl}
+                  title="BitCure App"
+                  style={{
+                    width: "100%",
+                    height: "700px",
+                    border: "1px solid #ddd",
+                    borderRadius: "5px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+                  }}
+                  onLoad={this.onIframeLoad}
+                  sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups"
+                />
+              ) : (
+                !error && (
+                  <div style={{
+                    width: "100%",
+                    height: "200px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: "1px dashed #ccc",
+                    borderRadius: "5px",
+                    color: "#999"
+                  }}>
+                    {loading ? "Waiting for token to load iframe..." : "No token available"}
+                  </div>
+                )
+              )}
+            </div>
+
           </div>
         </div>
       </Page>
@@ -168,4 +187,4 @@ class HomePage extends Component<IHomeProps, IHomeState> {
   }
 }
 
-export default HomePage;
+export default HomePage;

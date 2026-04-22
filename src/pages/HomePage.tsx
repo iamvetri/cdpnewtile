@@ -4,13 +4,14 @@ import { Page } from "react-onsenui";
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
 import { getToken } from "../services/container.svc";
+import LoadingScreen from "../components/LoadingScreen";
 
 export interface IHomeProps extends IBasePropsModel { }
 export interface IHomeState extends IBasePageStateModel {
   iframeUrl?: string;
+  /** true = still fetching the token (shows LoadingScreen overlay) */
   loading: boolean;
   error?: string;
-  iframeLoaded: boolean;
 }
 
 const BASE_IFRAME_URL = "https://devpatientapp.bitcure.com/impersonate/authenticate.html";
@@ -28,7 +29,6 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     iframeUrl: undefined,
     loading: true,
     error: undefined,
-    iframeLoaded: false
   };
 
   componentDidMount() {
@@ -37,30 +37,12 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
   fetchToken = async () => {
     try {
-      this.setState({ loading: true, error: undefined, iframeLoaded: false });
+      this.setState({ loading: true, error: undefined });
 
       const response = await getToken("gopika.m@claysys.com");
 
-      // Full raw response logged for debugging
       console.log("Full getToken response:", JSON.stringify(response, null, 2));
 
-      /*
-       * Actual API response shape (top-level, no .response wrapper):
-       *   {
-       *     success: true,
-       *     message: "",
-       *     data: {
-       *       statusCode: 200,
-       *       data: "TOKEN_VALUE",   <-- actual token is here
-       *       error: null
-       *     }
-       *   }
-       *
-       * The guid is hardcoded. Final iframe URL:
-       *   https://devpatientapp.bitcure.com/impersonate/authenticate.html?token=<TOKEN>&guid=<HARDCODED_GUID>
-       */
-
-      // Support both wrapped ({ response: {...} }) and unwrapped ({ success, data }) shapes
       const responseBody = response?.response ?? response;
       const isSuccess = responseBody?.success === true;
       const outerData = responseBody?.data;
@@ -69,18 +51,15 @@ class HomePage extends Component<IHomeProps, IHomeState> {
         let token = "";
 
         if (typeof outerData === "string" && outerData.length > 0) {
-          // Plain string token — strip any trailing &... params
           const ampIdx = outerData.indexOf("&");
           token = ampIdx !== -1 ? outerData.substring(0, ampIdx) : outerData;
 
         } else if (outerData && typeof outerData === "object") {
-          // Nested shape: { statusCode, data: "TOKEN", error }
           const inner = outerData.data;
           if (typeof inner === "string" && inner.length > 0) {
             const ampIdx = inner.indexOf("&");
             token = ampIdx !== -1 ? inner.substring(0, ampIdx) : inner;
           } else {
-            // Fallback: common token field names in the object itself
             token = outerData.token || outerData.access_token || outerData.tokenValue || "";
           }
         }
@@ -88,6 +67,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
         if (token) {
           const iframeUrl = `${BASE_IFRAME_URL}?token=${token}&guid=${HARDCODED_GUID}`;
           console.log("Iframe URL constructed:", iframeUrl);
+          // Hide LoadingScreen — iframe is already mounted and will navigate
           this.setState({ iframeUrl, loading: false });
         } else {
           this.setState({ error: "Token value was empty in response", loading: false });
@@ -104,87 +84,99 @@ class HomePage extends Component<IHomeProps, IHomeState> {
       console.error("fetchToken error:", err);
       this.setState({
         error: err?.message || "An error occurred while fetching token",
-        loading: false
+        loading: false,
       });
     }
   };
 
-  onIframeLoad = () => {
-    this.setState({ iframeLoaded: true });
-  };
-
   render() {
-    const { iframeUrl, loading, error, iframeLoaded } = this.state;
+    const { iframeUrl, loading, error } = this.state;
+
+    /* ── Error state ── */
+    if (error) {
+      return (
+        <Page key="home" id="home" className={this.pageClass}>
+          <div style={splashStyle}>
+            <img src="/tileicon.png" alt="Logo" style={logoStyle} />
+            <p style={{ color: "#e53935", fontSize: "15px", marginBottom: "16px" }}>
+              ❌ {error}
+            </p>
+            <button onClick={this.fetchToken} style={retryBtnStyle}>
+              Retry
+            </button>
+          </div>
+        </Page>
+      );
+    }
 
     return (
-      <Page key="home" id="home" className={this.pageClass} style={{ background: "#F8F9FB", height: "100%" }}>
-        <div className="home-page-container">
-          <div style={{ padding: "20px", textAlign: "center" }}>
-            <h1>Token Request &amp; Iframe Integration</h1>
+      <Page key="home" id="home" className={this.pageClass} style={{ margin: 0, padding: 0 }}>
 
-            {/* Status bar */}
-            <div style={{ marginBottom: "16px" }}>
-              {loading && (
-                <p style={{ color: "#555" }}>⏳ Fetching token...</p>
-              )}
-              {error && (
-                <div style={{ color: "red" }}>
-                  <p>❌ Error: {error}</p>
-                  <button
-                    onClick={this.fetchToken}
-                    style={{ marginTop: "8px", padding: "8px 20px", cursor: "pointer" }}
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-              {iframeUrl && !loading && (
-                <p style={{ color: "green" }}>
-                  ✅ Token retrieved — {iframeLoaded ? "Iframe loaded" : "Loading iframe..."}
-                </p>
-              )}
-            </div>
+        {/*
+         * LoadingScreen overlay — shown only while the main project is fetching
+         * the auth token (loading === true). It sits on top of everything via
+         * position:fixed + zIndex, and disappears the moment the token arrives.
+         * The iframe is NOT shown during this phase.
+         */}
+        {loading && <LoadingScreen />}
 
-            {/* Always show the iframe area; src is set only once token is ready */}
-            <div style={{ marginTop: "10px" }}>
-              {iframeUrl ? (
-                <iframe
-                  ref={this.iframeRef}
-                  src={iframeUrl}
-                  title="BitCure App"
-                  style={{
-                    width: "100%",
-                    height: "700px",
-                    border: "1px solid #ddd",
-                    borderRadius: "5px",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
-                  }}
-                  onLoad={this.onIframeLoad}
-                  sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups"
-                />
-              ) : (
-                !error && (
-                  <div style={{
-                    width: "100%",
-                    height: "200px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    border: "1px dashed #ccc",
-                    borderRadius: "5px",
-                    color: "#999"
-                  }}>
-                    {loading ? "Waiting for token to load iframe..." : "No token available"}
-                  </div>
-                )
-              )}
-            </div>
-
-          </div>
-        </div>
+        {/*
+         * Iframe — rendered only once we have the token URL.
+         * It is NOT pre-mounted while loading; it appears immediately after
+         * the token is ready so there is no second blank wait.
+         */}
+        {!loading && iframeUrl && (
+          <iframe
+            ref={this.iframeRef}
+            src={iframeUrl}
+            title="BitCure App"
+            sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups"
+            style={iframeFullStyle}
+          />
+        )}
       </Page>
     );
   }
 }
 
-export default HomePage;
+/* ─── Styles ─────────────────────────────────────────────── */
+
+const splashStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  height: "100vh",
+  background: "#f5f7fa",
+};
+
+const logoStyle: React.CSSProperties = {
+  width: "120px",
+  height: "auto",
+  marginBottom: "32px",
+  objectFit: "contain",
+};
+
+const retryBtnStyle: React.CSSProperties = {
+  padding: "10px 28px",
+  background: "#1a73e8",
+  color: "#fff",
+  border: "none",
+  borderRadius: "6px",
+  cursor: "pointer",
+  fontSize: "14px",
+};
+
+const iframeFullStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100vw",
+  height: "100vh",
+  border: "none",
+  margin: 0,
+  padding: 0,
+  zIndex: 9999,
+};
+
+export default HomePage;

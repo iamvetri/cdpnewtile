@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -34,7 +34,41 @@
   <noscript>
     You need to enable JavaScript to run this app.
   </noscript>
-  <div id="root"></div>
+  <div id="root">
+    <!-- Inline splash: shown until React mounts and replaces this content -->
+    <div id="app-splash" style="
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      background:#f5f7fa;
+      font-family:sans-serif;
+      margin:0;
+    ">
+      <img src="tileicon.png" alt="Loading..." style="width:120px;height:auto;margin-bottom:32px;object-fit:contain;" />
+      <div style="
+        width:52px;height:52px;
+        border:5px solid #e0e0e0;
+        border-top:5px solid #1a73e8;
+        border-radius:50%;
+        animation:_splash_spin 0.9s linear infinite;
+        margin-bottom:20px;
+      "></div>
+      <p style="color:#5f6368;font-size:15px;margin:0;">Please wait while we retrieve your information.</p>
+    </div>
+    <style>
+      @keyframes _splash_spin {
+        0% {
+          transform: rotate(0deg);
+        }
+
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </div>
 </body>
 
 </html>

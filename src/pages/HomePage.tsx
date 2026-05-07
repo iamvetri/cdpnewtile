@@ -1,285 +1,299 @@
 import React, { Component } from "react";
-import { Page, Toast } from "react-onsenui";
-import Button from "../components/Button";
+import { Page } from "react-onsenui";
 
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
-
-import { isNativeApp } from "../services/helper.svc";
-import { getMemberProfile, getTransactions } from "../services/TransactionConnector.service";
-import MemberProfile from "../components/MemberProfile";
-import TransactionsFilter from "../components/TransactionsFilter";
-import { ITransaction, ITransactionFilters, IPagination, ISorting } from "../models/Transaction.model";
+import { getToken, getUser } from "../services/container.svc";
+import LoadingScreen from "../components/LoadingScreen";
 
 export interface IHomeProps extends IBasePropsModel { }
-
 export interface IHomeState extends IBasePageStateModel {
-  profile: any | null;
-  transactions: ITransaction[];
-  filters: ITransactionFilters;
-  pagination: IPagination;
-  sorting: ISorting;
-  totalRecords: number;
-  openToast: boolean;
-  toastMsg: string;
-  toastColor: string;
+  iframeUrl?: string;
   loading: boolean;
+  error?: string;
 }
 
-const tableStyle: React.CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-  marginTop: "10px",
-  backgroundColor: "#fff",
-  borderRadius: "8px",
-  overflow: "hidden",
-  boxShadow: "0 4px 6px rgba(0,0,0,0.05)"
-};
-
-const thStyle: React.CSSProperties = {
-  backgroundColor: "#16324f",
-  color: "#fff",
-  padding: "12px",
-  textAlign: "left",
-  fontSize: "14px"
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "12px",
-  borderBottom: "1px solid #e5e7eb",
-  fontSize: "14px",
-  color: "#374151"
-};
+/** Final app URL — hdnId and hdnPatientId come from the validateUser response */
+const APP_URL = "https://devpatientapp.bitcure.com/AppSite/BitCureApp";
 
 class HomePage extends Component<IHomeProps, IHomeState> {
   pageContainer = React.createRef<HTMLDivElement>();
   pageClass = "desktop";
+  iframeRef = React.createRef<HTMLIFrameElement>();
+
+  /** Cookie data from the response — sent to iframe via postMessage once it loads */
+  private cookieData: any[] = [];
 
   state: IHomeState = {
     componentModel: undefined as any,
-    profile: null,
-    transactions: [],
-    filters: {},
-    pagination: { pageNumber: 1, pageSize: 10 },
-    sorting: { sortBy: "date", sortDirection: "desc" },
-    totalRecords: 0,
     openToast: false,
     toastMsg: "",
-    toastColor: "danger",
-    loading: true
+    iframeUrl: undefined,
+    loading: true,
+    error: undefined,
   };
 
   componentDidMount() {
-    if (isNativeApp()) {
-      this.pageClass = "native";
-    }
-    this.loadData();
+    this.fetchToken();
   }
 
-  loadData = async () => {
-    try {
-      this.setState({ loading: true });
+  // ─────────────────────────────────────────────────────────────────────────
+  // Extract the real payload from the CDP connector response.
+  //
+  // Observed console shape (22-Apr-2026 screenshot):
+  //   {
+  //     response: {                       ← CDP wrapper
+  //       success: true,
+  //       message: "",
+  //       data: {                         ← connector envelope
+  //         statusCode: 200,
+  //         message: "Success",
+  //         data: {                       ← ★ real payload
+  //           userId: 50387,
+  //           patientId: 22210,
+  //           access_token: "...",
+  //           cookie: [ { name, value, domain, ... } ]
+  //         }
+  //       }
+  //     }
+  //   }
+  // ─────────────────────────────────────────────────────────────────────────
+  private extractPayload(raw: any): any | null {
+    if (!raw) return null;
 
-      const [profile, txData] = await Promise.all([
-        getMemberProfile(),
-        getTransactions(this.state.filters, this.state.pagination, this.state.sorting)
-      ]);
+    const body = raw?.response ?? raw;
 
-      this.setState({
-        profile,
-        transactions: txData.transactions,
-        totalRecords: txData.totalRecords,
-        loading: false
-      });
-    } catch (err) {
-      console.error("Error loading data", err);
-      this.setState({ loading: false });
-      this.showToast("Failed to load data", "danger");
-    }
-  };
-
-  handleFilterChange = (filters: ITransactionFilters) => {
-    this.setState({ filters });
-  };
-
-  handleApplyFilters = () => {
-    this.setState({ pagination: { ...this.state.pagination, pageNumber: 1 } }, () => {
-      this.loadData();
-    });
-  };
-
-  handleClearFilters = () => {
-    this.setState({ filters: {}, pagination: { ...this.state.pagination, pageNumber: 1 } }, () => {
-      this.loadData();
-    });
-  };
-
-handleNextPage = () => {
-    const { pagination, totalRecords, transactions } = this.state;
-    
-    // Don't go to next page if current page is empty
-    if (transactions.length === 0) return;
-    
-    // If totalRecords is unknown (-1), allow next if we got a full page
-    if (totalRecords === -1) {
-      if (transactions.length < pagination.pageSize) return; // Last page
-      this.setState(
-        { pagination: { ...pagination, pageNumber: pagination.pageNumber + 1 } },
-        this.loadData
-      );
-    } else {
-      // Known total - check if there's a next page
-      if (pagination.pageNumber * pagination.pageSize < totalRecords) {
-        this.setState(
-          { pagination: { ...pagination, pageNumber: pagination.pageNumber + 1 } },
-          this.loadData
-        );
+    // Path 1: body.data.data (seen in screenshot — most common)
+    const envelope = body?.data;
+    if (envelope?.data && typeof envelope.data === "object") {
+      if (envelope.statusCode === 200 || envelope.message === "Success") {
+        console.log("[extractPayload] ✓ using body.data.data");
+        return envelope.data;
       }
     }
-  };
 
-  handlePrevPage = () => {
-    const { pagination } = this.state;
-    if (pagination.pageNumber > 1) {
-      this.setState(
-        { pagination: { ...pagination, pageNumber: pagination.pageNumber - 1 } },
-        this.loadData
+    // Path 2: body.data has access_token directly
+    if (envelope?.access_token) {
+      console.log("[extractPayload] ✓ using body.data");
+      return envelope;
+    }
+
+    // Path 3: body has access_token directly
+    if (body?.access_token) {
+      console.log("[extractPayload] ✓ using body");
+      return body;
+    }
+
+    console.warn("[extractPayload] ✗ No matching path. body =", body);
+    return null;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Store the _AFAUTH_2027 cookie so the iframe can authenticate.
+  //
+  // Strategy:
+  //   1. Set via document.cookie on the parent (works if domains align)
+  //   2. After iframe loads, send cookie via postMessage so the iframe-side
+  //      page can set it in its own domain context
+  // ─────────────────────────────────────────────────────────────────────────
+  private storeCookies(cookies: any[]): void {
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      console.warn("[storeCookies] No cookies in response");
+      return;
+    }
+
+    for (const c of cookies) {
+      const name = c.name || c.Name;
+      const value = c.value || c.Value;
+      const domain = c.domain || c.Domain || "";
+      const path = c.path || c.Path || "/";
+      const secure = c.secure ?? c.Secure ?? true;
+
+      if (!name || !value) continue;
+
+      // Attempt 1: Set on the parent page via document.cookie
+      let cookieStr = `${name}=${value}; path=${path}; SameSite=None`;
+      if (secure) cookieStr += "; Secure";
+      // Note: cannot set httpOnly via JS — omitting it intentionally
+      try {
+        document.cookie = cookieStr;
+        console.log(`[storeCookies] Set via document.cookie: ${name} (domain hint: ${domain})`);
+      } catch (err) {
+        console.warn(`[storeCookies] document.cookie failed for ${name}:`, err);
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // After the iframe loads, send the cookie data via postMessage so the
+  // iframe-side page (on devpatientapp.bitcure.com) can set the cookie
+  // in its own domain context using document.cookie.
+  // ─────────────────────────────────────────────────────────────────────────
+  handleIframeLoad = () => {
+    if (this.cookieData.length > 0 && this.iframeRef.current?.contentWindow) {
+      const message = {
+        type: "SET_COOKIE",
+        cookies: this.cookieData,
+      };
+      this.iframeRef.current.contentWindow.postMessage(
+        JSON.stringify(message),
+        "https://devpatientapp.bitcure.com"
       );
+      console.log("[postMessage] Sent SET_COOKIE to iframe:", message);
     }
   };
 
-  showToast = (msg: string, color: string) => {
-    this.setState({ openToast: true, toastMsg: msg, toastColor: color });
+  // ─────────────────────────────────────────────────────────────────────────
+  fetchToken = async () => {
+    try {
+      this.setState({ loading: true, error: undefined });
+
+      // ── Step 1: resolve email via getUser() ───────────────────────────
+      let email = "";
+      try {
+        const userResult = await getUser();
+        console.log("getUser response:", JSON.stringify(userResult, null, 2));
+        const emails = userResult?.data?.memberInfo?.emailAddresses;
+        if (Array.isArray(emails) && emails.length > 0) {
+          email = emails[0].emailAddress || "";
+        }
+      } catch (userErr: any) {
+        console.warn("getUser failed, proceeding with empty email:", userErr);
+      }
+      console.log("Email resolved for getToken:", email);
+
+      // ── Step 2: call getToken (type=validateUser) ─────────────────────
+      const response = await getToken(email);
+      console.log("getToken raw response:", JSON.stringify(response, null, 2));
+
+      const payload = this.extractPayload(response);
+
+      if (!payload) {
+        this.setState({
+          error: "Could not parse token response — check console.",
+          loading: false,
+        });
+        return;
+      }
+
+      const accessToken: string = payload.access_token || payload.token || "";
+      const userId: number      = payload.userId    || payload.UserId    || 0;
+      const patientId: number   = payload.patientId || payload.PatientId || 0;
+      const cookies: any[]      = payload.cookie    || payload.cookies   || [];
+
+      console.log("[validateUser] accessToken :", accessToken ? "✓ present" : "✗ missing");
+      console.log("[validateUser] userId      :", userId);
+      console.log("[validateUser] patientId   :", patientId);
+      console.log("[validateUser] cookies     :", cookies.length, "cookie(s)");
+
+      if (!accessToken) {
+        this.setState({
+          error: "access_token missing in validateUser response.",
+          loading: false,
+        });
+        return;
+      }
+
+      // ── Step 3: store the cookies from the response ───────────────────
+      this.cookieData = cookies;
+      this.storeCookies(cookies);
+
+      // ── Step 4: build iframe URL and load ──────────────────────────────
+      const iframeUrl = `${APP_URL}?hdnId=${userId}&hdnPatientId=${patientId}`;
+      console.log("[iframe] URL:", iframeUrl);
+
+      this.setState({ iframeUrl, loading: false });
+
+    } catch (err: any) {
+      console.error("fetchToken error:", err);
+      this.setState({
+        error: err?.message || "An error occurred while fetching token",
+        loading: false,
+      });
+    }
   };
 
-  dismissToast = () => {
-    this.setState({ openToast: false });
-  };
-
+  // ─────────────────────────────────────────────────────────────────────────
   render() {
-    const { profile, transactions, filters, loading, pagination, totalRecords } = this.state;
+    const { iframeUrl, loading, error } = this.state;
+
+    /* ── Error state ───────────────────────────────────────────────────── */
+    if (error) {
+      return (
+        <Page key="home" id="home" className={this.pageClass}>
+          <div style={splashStyle}>
+            <img src="/tileicon.png" alt="Logo" style={logoStyle} />
+            <p style={{ color: "#e53935", fontSize: "15px", marginBottom: "16px" }}>
+              ❌ {error}
+            </p>
+            <button onClick={this.fetchToken} style={retryBtnStyle}>
+              Retry
+            </button>
+          </div>
+        </Page>
+      );
+    }
 
     return (
-      <Page key="home" id="home" className={this.pageClass}>
-        <Toast isOpen={this.state.openToast} className={this.state.toastColor}>
-          <div>{this.state.toastMsg}</div>
-          <Button variant="toast" onClick={this.dismissToast} style={{ marginLeft: "15px" }}>OK</Button>
-        </Toast>
+      <Page key="home" id="home" className={this.pageClass} style={{ margin: 0, padding: 0 }}>
 
-        <div
-          className="cdp_page_container"
-          ref={this.pageContainer}
-          style={{ padding: "20px", paddingBottom: "80px", maxWidth: "900px", margin: "0 auto", overflowY: "auto", height: "100%", boxSizing: "border-box" }}
-        >
-          {profile && (
-            <MemberProfile
-              firstName={profile.firstName}
-              lastName={profile.lastName}
-              email={profile.email}
-              phone={profile.phone}
-            />
-          )}
+        {/* Loading overlay while fetching token */}
+        {loading && <LoadingScreen />}
 
-          <TransactionsFilter
-            filters={filters}
-            onFilterChange={this.handleFilterChange}
-            onApply={this.handleApplyFilters}
-            onClear={this.handleClearFilters}
+        {/* AppSite iframe — cookie already stored before loading */}
+        {!loading && iframeUrl && (
+          <iframe
+            ref={this.iframeRef}
+            src={iframeUrl}
+            title="BitCure App"
+            onLoad={this.handleIframeLoad}
+            sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups allow-popups-to-escape-sandbox"
+            style={iframeFullStyle}
           />
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-            <h2 style={{ margin: 0 }}>Transactions</h2>
-            <div>
-              <Button
-                variant="quiet"
-                onClick={this.loadData}
-                disabled={loading}
-              >
-                Refresh Data
-              </Button>
-            </div>
-          </div>
-
-          {loading ? (
-            <div style={{ textAlign: "center", padding: "40px", color: "#6b7280" }}>Loading data...</div>
-          ) : transactions.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px", background: "#f9fafb", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
-              <h3 style={{ margin: 0, color: "#6b7280" }}>No transactions found</h3>
-              <p style={{ margin: "8px 0 0", fontSize: "14px", color: "#9ca3af" }}>Try adjusting your filters or go back to the previous page</p>
-            </div>
-          ) : (
-            <div>
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                   <th style={thStyle}>Date</th>
-                    <th style={thStyle}>Description</th>
-                    <th style={thStyle}>Amount</th>
-                    <th style={thStyle}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map(t => (
-                    <tr key={t.id}>
-                      <td style={tdStyle}>{new Date(t.date).toLocaleDateString()}</td>
-                      <td style={tdStyle}>{t.description}</td>
-                      <td style={tdStyle}>
-                        <span style={{ color: t.type === "Credit" ? "#10b981" : "#ef4444", fontWeight: 500 }}>
-                          {t.type === "Credit" ? "+" : "-"}${t.amount.toFixed(2)}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <span style={{
-                          padding: "4px 8px",
-                          borderRadius: "12px",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          backgroundColor: (t.status === "Completed" || t.status === "Posted") ? "#d1fae5" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
-                          color: (t.status === "Completed" || t.status === "Posted") ? "#065f46" : t.status === "Pending" ? "#92400e" : "#991b1b"
-                        }}>
-                          {t.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Pagination Controls - Always visible */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", fontSize: "14px", color: "#6b7280" }}>
-            <div>
-              {transactions.length > 0 ? (
-                <span>
-                  Showing :{(pagination.pageNumber - 1) * pagination.pageSize + 1} - {(pagination.pageNumber - 1) * pagination.pageSize + transactions.length}
-                </span>
-              ) : (
-                <span>Page {pagination.pageNumber}</span>
-              )}
-            </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <Button
-                variant="secondary"
-                onClick={this.handlePrevPage}
-                disabled={pagination.pageNumber === 1}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={this.handleNextPage}
-                disabled={transactions.length === 0 || (totalRecords > 0 && pagination.pageNumber * pagination.pageSize > totalRecords) || (totalRecords === -1 && transactions.length < pagination.pageSize)}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-
-        </div>
+        )}
       </Page>
     );
   }
 }
+
+/* ─── Styles ──────────────────────────────────────────────────────────── */
+
+const splashStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  height: "100vh",
+  background: "#f5f7fa",
+};
+
+const logoStyle: React.CSSProperties = {
+  width: "120px",
+  height: "auto",
+  marginBottom: "32px",
+  objectFit: "contain",
+};
+
+const retryBtnStyle: React.CSSProperties = {
+  padding: "10px 28px",
+  background: "#1a73e8",
+  color: "#fff",
+  border: "none",
+  borderRadius: "6px",
+  cursor: "pointer",
+  fontSize: "14px",
+};
+
+const iframeFullStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "100vw",
+  height: "100vh",
+  border: "none",
+  margin: 0,
+  padding: 0,
+  zIndex: 9999,
+};
 
 export default HomePage;

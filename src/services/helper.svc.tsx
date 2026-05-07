@@ -206,11 +206,19 @@ export function ProcessMetaAction(
           )
           .then(() => {
             const clone = (navigator as any).clone;
-            container.tile.navigation.pushPanelWithTitle(
-              clone,
-              openPageAction.pageName,
-              openPageAction.pageTitle
-            );
+            if (openPageAction.pageTitle) {
+              container.tile.navigation.pushPanelWithTitle(
+                clone,
+                openPageAction.pageName,
+                openPageAction.pageTitle
+              );
+            } else {
+              if (container.tile.navigation.pushPanel) {
+                container.tile.navigation.pushPanel(clone, openPageAction.pageName);
+              } else {
+                container.tile.navigation.pushPanelWithTitle(clone, openPageAction.pageName, "");
+              }
+            }
             resolve();
           })
           .catch((err) => {

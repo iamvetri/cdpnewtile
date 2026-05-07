@@ -87,4 +87,34 @@ export const sendRequest = (
   });
 };
 
+export const getToken = (email: string): Promise<any> => {
+  return sendRequest(
+    "ClaysysPayrails",
+    "1.0",
+    "getToken",
+    {
+      email: email,
+      type: "validateUser"
+    }
+  );
+};
+
+/** Wraps container.user.getUser in a Promise */
+export const getUser = (): Promise<any> =>
+  new Promise((resolve, reject) => {
+    try {
+      (window as any).container.user.getUser((result: any) => {
+        if (result && result.success) {
+          resolve(result);
+        } else {
+          reject(result || { success: false, message: "getUser failed" });
+        }
+      });
+    } catch (err) {
+      reject({
+        success: false,
+        message: err instanceof Error ? err.message : "Exception in getUser"
+      });
+    }
+  });
 export default container;

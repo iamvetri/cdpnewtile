@@ -26,6 +26,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
           src={IFRAME_URL}
           title="EverWise Credit Union"
           style={iframeFullStyle}
+          allow="geolocation"
           sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups allow-popups-to-escape-sandbox"
         />
       </Page>

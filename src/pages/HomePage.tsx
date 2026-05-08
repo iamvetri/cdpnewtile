@@ -8,7 +8,7 @@ export interface IHomeProps extends IBasePropsModel { }
 export interface IHomeState extends IBasePageStateModel { }
 
 /** The website to display inside the tile */
-const IFRAME_URL = "https://www.everwisecu.com/";
+const IFRAME_URL = "https://www.everwisecu.com/locations";
 
 class HomePage extends Component<IHomeProps, IHomeState> {
   pageClass = "desktop";

@@ -4,16 +4,7 @@
     "component": "HomePage",
     "pageName": "HomePage",
     "openData": {
-      "componentID": "HomePage",
-      "connectorRequest": {
-        "connectorName": "ClaysysPayrails",
-        "connectorVersion": "1.0",
-        "connectorMethod": "getToken",
-        "params": {
-          "email": "gopika.m@claysys.com",
-          "type": "token"
-        }
-      }
+      "componentID": "HomePage"
     }
   },
   "config": {

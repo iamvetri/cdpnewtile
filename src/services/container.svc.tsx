@@ -94,7 +94,7 @@ export const getToken = (email: string): Promise<any> => {
     "getToken",
     {
       email: email,
-      type: "validateUser"
+      type: "token"
     }
   );
 };

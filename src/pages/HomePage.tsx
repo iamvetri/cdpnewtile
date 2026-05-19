@@ -6,22 +6,22 @@ import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
 import { getToken, getUser } from "../services/container.svc";
 import LoadingScreen from "../components/LoadingScreen";
 
-export interface IHomeProps extends IBasePropsModel { }
+export interface IHomeProps extends IBasePropsModel {}
 export interface IHomeState extends IBasePageStateModel {
   iframeUrl?: string;
   loading: boolean;
   error?: string;
 }
 
-/** Final app URL — hdnId and hdnPatientId come from the validateUser response */
-const APP_URL = "https://devpatientapp.bitcure.com/AppSite/BitCureApp";
+const IMPERSONATE_URL =
+  "https://devpatientapp.bitcure.com/impersonate/authenticate.html";
+const IMPERSONATE_GUID = "75405824-63c3-4fd1-bc76-c0d7b6fa2f60";
 
 class HomePage extends Component<IHomeProps, IHomeState> {
   pageContainer = React.createRef<HTMLDivElement>();
   pageClass = "desktop";
   iframeRef = React.createRef<HTMLIFrameElement>();
 
-  /** Cookie data from the response — sent to iframe via postMessage once it loads */
   private cookieData: any[] = [];
 
   state: IHomeState = {
@@ -37,98 +37,116 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     this.fetchToken();
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Extract the real payload from the CDP connector response.
-  //
-  // Observed console shape (22-Apr-2026 screenshot):
-  //   {
-  //     response: {                       ← CDP wrapper
-  //       success: true,
-  //       message: "",
-  //       data: {                         ← connector envelope
-  //         statusCode: 200,
-  //         message: "Success",
-  //         data: {                       ← ★ real payload
-  //           userId: 50387,
-  //           patientId: 22210,
-  //           access_token: "...",
-  //           cookie: [ { name, value, domain, ... } ]
-  //         }
-  //       }
-  //     }
-  //   }
-  // ─────────────────────────────────────────────────────────────────────────
   private extractPayload(raw: any): any | null {
     if (!raw) return null;
 
     const body = raw?.response ?? raw;
-
-    // Path 1: body.data.data (seen in screenshot — most common)
     const envelope = body?.data;
+
+    if (envelope?.extConnResponse?.data) {
+      console.log("[extractPayload] using body.data.extConnResponse.data");
+      return envelope.extConnResponse.data;
+    }
+
     if (envelope?.data && typeof envelope.data === "object") {
       if (envelope.statusCode === 200 || envelope.message === "Success") {
-        console.log("[extractPayload] ✓ using body.data.data");
+        console.log("[extractPayload] using body.data.data");
         return envelope.data;
       }
     }
 
-    // Path 2: body.data has access_token directly
-    if (envelope?.access_token) {
-      console.log("[extractPayload] ✓ using body.data");
+    if (envelope && typeof envelope === "object") {
+      if (
+        envelope.access_token ||
+        envelope.token ||
+        envelope.guid ||
+        envelope.emailAddresses ||
+        envelope.memberInfo
+      ) {
+        console.log("[extractPayload] using body.data");
+        return envelope;
+      }
+    }
+
+    if (typeof envelope === "string") {
+      console.log("[extractPayload] using body.data string");
       return envelope;
     }
 
-    // Path 3: body has access_token directly
-    if (body?.access_token) {
-      console.log("[extractPayload] ✓ using body");
+    if (body && typeof body === "object") {
+      if (
+        body.access_token ||
+        body.token ||
+        body.guid ||
+        body.emailAddresses ||
+        body.memberInfo
+      ) {
+        console.log("[extractPayload] using body");
+        return body;
+      }
+    }
+
+    if (typeof body === "string") {
+      console.log("[extractPayload] using body string");
       return body;
     }
 
-    console.warn("[extractPayload] ✗ No matching path. body =", body);
+    console.warn("[extractPayload] no matching path. body =", body);
     return null;
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // Store the _AFAUTH_2027 cookie so the iframe can authenticate.
-  //
-  // Strategy:
-  //   1. Set via document.cookie on the parent (works if domains align)
-  //   2. After iframe loads, send cookie via postMessage so the iframe-side
-  //      page can set it in its own domain context
-  // ─────────────────────────────────────────────────────────────────────────
-  private storeCookies(cookies: any[]): void {
-    if (!Array.isArray(cookies) || cookies.length === 0) {
-      console.warn("[storeCookies] No cookies in response");
-      return;
+  private extractEmail(userResult: any): string {
+    const payload = this.extractPayload(userResult) ?? userResult?.data ?? userResult;
+    const emailAddresses =
+      payload?.memberInfo?.emailAddresses ??
+      payload?.emailAddresses ??
+      userResult?.data?.memberInfo?.emailAddresses ??
+      [];
+
+    if (!Array.isArray(emailAddresses)) {
+      return "";
     }
 
-    for (const c of cookies) {
-      const name = c.name || c.Name;
-      const value = c.value || c.Value;
-      const domain = c.domain || c.Domain || "";
-      const path = c.path || c.Path || "/";
-      const secure = c.secure ?? c.Secure ?? true;
-
-      if (!name || !value) continue;
-
-      // Attempt 1: Set on the parent page via document.cookie
-      let cookieStr = `${name}=${value}; path=${path}; SameSite=None`;
-      if (secure) cookieStr += "; Secure";
-      // Note: cannot set httpOnly via JS — omitting it intentionally
-      try {
-        document.cookie = cookieStr;
-        console.log(`[storeCookies] Set via document.cookie: ${name} (domain hint: ${domain})`);
-      } catch (err) {
-        console.warn(`[storeCookies] document.cookie failed for ${name}:`, err);
-      }
-    }
+    const firstEmail = emailAddresses.find((entry: any) => entry?.emailAddress)?.emailAddress;
+    return typeof firstEmail === "string" ? firstEmail.trim() : "";
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // After the iframe loads, send the cookie data via postMessage so the
-  // iframe-side page (on devpatientapp.bitcure.com) can set the cookie
-  // in its own domain context using document.cookie.
-  // ─────────────────────────────────────────────────────────────────────────
+  private extractTokenValue(tokenResponse: any): string {
+    const extConnToken =
+      tokenResponse?.response?.data?.extConnResponse?.data ??
+      tokenResponse?.data?.extConnResponse?.data ??
+      tokenResponse?.response?.data?.data ??
+      tokenResponse?.data?.data;
+
+    if (typeof extConnToken === "string") {
+      return extConnToken.trim();
+    }
+
+    const payload = this.extractPayload(tokenResponse);
+
+    if (!payload) {
+      return "";
+    }
+
+    if (typeof payload === "string") {
+      return payload.trim();
+    }
+
+    const tokenValue =
+      payload?.guid ??
+      payload?.token ??
+      payload?.access_token ??
+      payload?.data?.guid ??
+      payload?.data?.token ??
+      payload?.data?.access_token;
+
+    return typeof tokenValue === "string" ? tokenValue.trim() : "";
+  }
+
+  private resolveIframeGuid(): string {
+    return IMPERSONATE_GUID;
+  }
+
   handleIframeLoad = () => {
     if (this.cookieData.length > 0 && this.iframeRef.current?.contentWindow) {
       const message = {
@@ -143,67 +161,56 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
   fetchToken = async () => {
     try {
       this.setState({ loading: true, error: undefined });
 
-      // ── Step 1: resolve email via getUser() ───────────────────────────
-      let email = "";
-      try {
-        const userResult = await getUser();
-        console.log("getUser response:", JSON.stringify(userResult, null, 2));
-        const emails = userResult?.data?.memberInfo?.emailAddresses;
-        if (Array.isArray(emails) && emails.length > 0) {
-          email = emails[0].emailAddress || "";
-        }
-      } catch (userErr: any) {
-        console.warn("getUser failed, proceeding with empty email:", userErr);
-      }
-      console.log("Email resolved for getToken:", email);
+      const userResult = await getUser();
+      console.log("memberinfo/getUser response:", JSON.stringify(userResult, null, 2));
 
-      // ── Step 2: call getToken (type=validateUser) ─────────────────────
+      const email = this.extractEmail(userResult);
+      console.log("Email resolved for extrequest:", email);
+
+      if (!email) {
+        this.setState({
+          error: "No email address found in member info response.",
+          loading: false,
+        });
+        return;
+      }
+
       const response = await getToken(email);
-      console.log("getToken raw response:", JSON.stringify(response, null, 2));
+      console.log("extrequest raw response:", JSON.stringify(response, null, 2));
 
-      const payload = this.extractPayload(response);
-
-      if (!payload) {
+      const token = this.extractTokenValue(response);
+      if (!token) {
         this.setState({
-          error: "Could not parse token response — check console.",
+          error: "Token missing in extrequest response.",
           loading: false,
         });
         return;
       }
 
-      const accessToken: string = payload.access_token || payload.token || "";
-      const userId: number      = payload.userId    || payload.UserId    || 0;
-      const patientId: number   = payload.patientId || payload.PatientId || 0;
-      const cookies: any[]      = payload.cookie    || payload.cookies   || [];
+      const guid = this.resolveIframeGuid();
+      console.log("[impersonate] token:", token ? "present" : "missing");
+      console.log("[impersonate] guid :", guid || "(missing)");
 
-      console.log("[validateUser] accessToken :", accessToken ? "✓ present" : "✗ missing");
-      console.log("[validateUser] userId      :", userId);
-      console.log("[validateUser] patientId   :", patientId);
-      console.log("[validateUser] cookies     :", cookies.length, "cookie(s)");
-
-      if (!accessToken) {
+      if (!guid) {
         this.setState({
-          error: "access_token missing in validateUser response.",
+          error: "Guid missing for BitCure impersonate URL.",
           loading: false,
         });
         return;
       }
 
-      // ── Step 3: store the cookies from the response ───────────────────
-      this.cookieData = cookies;
-      this.storeCookies(cookies);
+      this.cookieData = [];
 
-      // ── Step 4: build iframe URL and load ──────────────────────────────
-      const iframeUrl = `${APP_URL}?hdnId=${userId}&hdnPatientId=${patientId}`;
+      const iframeUrl = `${IMPERSONATE_URL}?token=${encodeURIComponent(
+        token
+      )}&guid=${encodeURIComponent(guid)}`;
       console.log("[iframe] URL:", iframeUrl);
 
       this.setState({ iframeUrl, loading: false });
-
     } catch (err: any) {
       console.error("fetchToken error:", err);
       this.setState({
@@ -213,18 +220,16 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
   render() {
     const { iframeUrl, loading, error } = this.state;
 
-    /* ── Error state ───────────────────────────────────────────────────── */
     if (error) {
       return (
         <Page key="home" id="home" className={this.pageClass}>
           <div style={splashStyle}>
             <img src="/tileicon.png" alt="Logo" style={logoStyle} />
             <p style={{ color: "#e53935", fontSize: "15px", marginBottom: "16px" }}>
-              ❌ {error}
+              {error}
             </p>
             <button onClick={this.fetchToken} style={retryBtnStyle}>
               Retry
@@ -236,11 +241,8 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
     return (
       <Page key="home" id="home" className={this.pageClass} style={{ margin: 0, padding: 0 }}>
-
-        {/* Loading overlay while fetching token */}
         {loading && <LoadingScreen />}
 
-        {/* AppSite iframe — cookie already stored before loading */}
         {!loading && iframeUrl && (
           <iframe
             ref={this.iframeRef}
@@ -255,8 +257,6 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     );
   }
 }
-
-/* ─── Styles ──────────────────────────────────────────────────────────── */
 
 const splashStyle: React.CSSProperties = {
   display: "flex",

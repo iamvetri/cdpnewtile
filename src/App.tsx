@@ -16,7 +16,6 @@ class App extends Component<any, any> {
    */
   render() {
     const renderPage = (route: any, appNavigator: Navigator) => {
-      console.log("renderpage");
       // @ts-ignore
       if (!appNavigator.clone) {
         appNavigator = this.initTileAndNavigatorForPlatform(appNavigator);
@@ -31,7 +30,7 @@ class App extends Component<any, any> {
     return (
       <>
         <Navigator id="AppNavigator" key="AppNavigator" renderPage={renderPage} ref={this.navEl} />
-        {this.state.loading && <LoadingScreen className="cdp-startup-loader" />}
+        {this.state.loading && <LoadingScreen />}
       </>
     );
   }
@@ -45,11 +44,9 @@ class App extends Component<any, any> {
         .then(() => TileInit(nav))
         .then(
           () => {
-            console.log("Tile Init Success");
             this.setState({ loading: false });
           },
-          (msg) => {
-            console.log("Tile Init Failed:", msg);
+          () => {
             this.setState({ loading: false });
             GoToErrorPage(nav);
           }
@@ -86,8 +83,6 @@ class App extends Component<any, any> {
     });
   }
 
-
-
   /* set up the react onsen nav to play nice with the container nav
    */
   initTileAndNavigatorForPlatform(appNavigator: Navigator): any {
@@ -98,15 +93,12 @@ class App extends Component<any, any> {
 
     // @ts-ignore
     appNavigator.clone.pushPage = () => {
-      console.log("clone pushing page...");
-      console.log(appNavigator);
+      return undefined;
     };
 
     // @ts-ignore
     tile.popPanel = () => {
-      appNavigator.popPage().then((ok: any) => {
-        console.log("clone navigator pop");
-      });
+      appNavigator.popPage().then(() => undefined);
     };
 
     return appNavigator;

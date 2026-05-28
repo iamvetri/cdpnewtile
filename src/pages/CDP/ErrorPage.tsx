@@ -9,7 +9,6 @@ class ErrorPage extends Component<any, IBaseStateModel> {
 
 
   render() {
-    console.log("error page render");
     return (
       <Page key="ErrorPage" id="ErrorPage">
         <div id="errorPageContianer" onClick={this.refresh}>
@@ -28,7 +27,6 @@ class ErrorPage extends Component<any, IBaseStateModel> {
   }
 
   refresh = () => {
-    console.log("refresh, ");
     window.location.reload();
   }
 }

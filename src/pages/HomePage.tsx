@@ -4,6 +4,7 @@ import { Page } from "react-onsenui";
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
 import { sendRequest } from "../services/container.svc";
+import LoadingScreen from "../components/LoadingScreen";
 
 export interface IHomeProps extends IBasePropsModel { }
 export interface IHomeState extends IBasePageStateModel {
@@ -178,8 +179,8 @@ class HomePage extends Component<IHomeProps, IHomeState> {
 
     return (
       <Page key="home" id="home" className={this.pageClass} style={{ margin: 0, padding: 0 }}>
+        {isLoading ? <LoadingScreen /> : null}
         <div style={statusContainerStyle}>
-          {isLoading ? <div style={loadingTextStyle}>Loading website...</div> : null}
           {errorMessage ? <div style={errorTextStyle}>{errorMessage}</div> : null}
           {connectorResponse ? (
             <details style={detailsStyle}>
@@ -201,19 +202,10 @@ const statusContainerStyle: React.CSSProperties = {
   boxSizing: "border-box"
 };
 
-const loadingTextStyle: React.CSSProperties = {
-  fontSize: 16,
-  marginBottom: 8
-};
-
 const errorTextStyle: React.CSSProperties = {
   marginTop: 8,
   color: "#b71c1c",
   fontSize: 13
-};
-
-const resultPreStyle: React.CSSProperties = {
-  display: "none"
 };
 
 const detailsStyle: React.CSSProperties = {

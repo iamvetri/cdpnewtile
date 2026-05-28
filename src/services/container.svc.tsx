@@ -40,14 +40,6 @@ export const sendRequest = (
   const requestParams =
     params != null && typeof params === "object" ? params : {};
 
-  console.log("sendRequest ->", {
-    connectorName,
-    connectorVersion,
-    connectorMethod,
-    params,
-    requestParams
-  });
-
   return new Promise((resolve, reject) => {
     if (!container || !container.connectors) {
       reject({
@@ -64,8 +56,6 @@ export const sendRequest = (
         connectorMethod,
         requestParams,
         (resp: any) => {
-          console.log("Connector Response:", resp);
-
           if (!resp) {
             reject({
               success: false,
@@ -86,35 +76,4 @@ export const sendRequest = (
     }
   });
 };
-
-export const getToken = (email: string): Promise<any> => {
-  return sendRequest(
-    "ClaysysPayrails",
-    "1.0",
-    "getToken",
-    {
-      email: email,
-      type: "validateUser"
-    }
-  );
-};
-
-/** Wraps container.user.getUser in a Promise */
-export const getUser = (): Promise<any> =>
-  new Promise((resolve, reject) => {
-    try {
-      (window as any).container.user.getUser((result: any) => {
-        if (result && result.success) {
-          resolve(result);
-        } else {
-          reject(result || { success: false, message: "getUser failed" });
-        }
-      });
-    } catch (err) {
-      reject({
-        success: false,
-        message: err instanceof Error ? err.message : "Exception in getUser"
-      });
-    }
-  });
 export default container;

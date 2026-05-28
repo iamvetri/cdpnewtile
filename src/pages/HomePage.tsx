@@ -3,38 +3,235 @@ import { Page } from "react-onsenui";
 
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
+import { sendRequest } from "../services/container.svc";
 
 export interface IHomeProps extends IBasePropsModel { }
-export interface IHomeState extends IBasePageStateModel { }
-
-/** The website to display inside the tile */
-const IFRAME_URL = "https://www.everwisecu.com/locations";
+export interface IHomeState extends IBasePageStateModel {
+  isLoading: boolean;
+  errorMessage: string;
+  iframeUrl: string;
+  connectorResponse: any;
+}
 
 class HomePage extends Component<IHomeProps, IHomeState> {
   pageClass = "desktop";
+  requestPayload = {
+    url: "https://dummyjson.com/products"
+  };
 
   state: IHomeState = {
     componentModel: undefined as any,
     openToast: false,
     toastMsg: "",
+    isLoading: true,
+    errorMessage: "",
+    iframeUrl: "",
+    connectorResponse: null
+  };
+
+  componentDidMount(): void {
+    this.loadIframeFromConnector();
+  }
+
+  extractIframeUrl(response: any): string {
+    if (!response) {
+      return "";
+    }
+
+    const urlFromKnownPaths =
+      response?.response?.data?.extConnResponse?.data?.name ??
+      response?.response?.data?.extConnResponse?.data?.url ??
+      response?.response?.data?.data?.name ??
+      response?.response?.data?.data?.url ??
+      response?.response?.data?.name ??
+      response?.response?.data?.url ??
+      response?.data?.extConnResponse?.data?.name ??
+      response?.data?.extConnResponse?.data?.url ??
+      response?.data?.data?.name ??
+      response?.data?.data?.url ??
+      response?.data?.name ??
+      response?.data?.url ??
+      response?.extConnResponse?.data?.name ??
+      response?.extConnResponse?.data?.url ??
+      response?.name ??
+      response?.url;
+
+    if (typeof urlFromKnownPaths === "string") {
+      const normalizedUrl = urlFromKnownPaths.trim();
+      if (/^https?:\/\//i.test(normalizedUrl)) {
+        return normalizedUrl;
+      }
+    }
+
+    return this.findFirstHttpUrl(response);
+  }
+
+  findFirstHttpUrl(input: any): string {
+    const visited = new WeakSet<object>();
+    const queue: any[] = [input];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+
+      if (typeof current === "string") {
+        const normalized = current.trim();
+        if (/^https?:\/\//i.test(normalized)) {
+          return normalized;
+        }
+        continue;
+      }
+
+      if (!current || typeof current !== "object") {
+        continue;
+      }
+
+      if (visited.has(current)) {
+        continue;
+      }
+      visited.add(current);
+
+      if (Array.isArray(current)) {
+        for (let i = 0; i < current.length; i += 1) {
+          queue.push(current[i]);
+        }
+        continue;
+      }
+
+      const values = Object.values(current);
+      for (let i = 0; i < values.length; i += 1) {
+        queue.push(values[i]);
+      }
+    }
+
+    return "";
+  }
+
+  getConnectorErrorMessage(response: any): string {
+    if (!response) {
+      return "";
+    }
+
+    return (
+      response?.response?.message ??
+      response?.message ??
+      ""
+    );
+  }
+
+  loadIframeFromConnector = async () => {
+    this.setState({
+      isLoading: true,
+      errorMessage: "",
+      iframeUrl: "",
+      connectorResponse: null
+    });
+
+    try {
+      const response = await sendRequest(
+        "claysysbasiccdptransfers",
+        "1.0",
+        "externalCallMethod",
+        this.requestPayload
+      );
+      const iframeUrl = this.extractIframeUrl(response);
+      const connectorError = this.getConnectorErrorMessage(response);
+      const isRequestFailed =
+        response?.success === false || response?.response?.success === false;
+
+      this.setState({
+        isLoading: false,
+        connectorResponse: response,
+        iframeUrl,
+        errorMessage:
+          isRequestFailed
+            ? connectorError || "Connector request failed."
+            : !iframeUrl
+            ? "Request succeeded, but no iframe URL found in connector response."
+            : ""
+      });
+    } catch (error: any) {
+      this.setState({
+        isLoading: false,
+        errorMessage: error?.message || "Failed to call connector request.",
+        connectorResponse: error || null,
+        iframeUrl: ""
+      });
+    }
   };
 
   render() {
+    const { isLoading, errorMessage, iframeUrl, connectorResponse } = this.state;
+
+    if (iframeUrl) {
+      return (
+        <Page key="home" id="home" className={this.pageClass} style={{ margin: 0, padding: 0 }}>
+          <iframe
+            src={iframeUrl}
+            title="Connector Website"
+            style={iframeFullStyle}
+            allow="geolocation"
+            sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups allow-popups-to-escape-sandbox"
+          />
+        </Page>
+      );
+    }
+
     return (
       <Page key="home" id="home" className={this.pageClass} style={{ margin: 0, padding: 0 }}>
-        <iframe
-          src={IFRAME_URL}
-          title="EverWise Credit Union"
-          style={iframeFullStyle}
-          allow="geolocation"
-          sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups allow-popups-to-escape-sandbox"
-        />
+        <div style={statusContainerStyle}>
+          {isLoading ? <div style={loadingTextStyle}>Loading website...</div> : null}
+          {errorMessage ? <div style={errorTextStyle}>{errorMessage}</div> : null}
+          {connectorResponse ? (
+            <details style={detailsStyle}>
+              <summary>Connector Response</summary>
+              <pre style={responsePreStyle}>{JSON.stringify(connectorResponse, null, 2)}</pre>
+            </details>
+          ) : null}
+        </div>
       </Page>
     );
   }
 }
 
 /* ─── Styles ──────────────────────────────────────────────────────────── */
+
+const statusContainerStyle: React.CSSProperties = {
+  padding: "16px",
+  minHeight: "100vh",
+  boxSizing: "border-box"
+};
+
+const loadingTextStyle: React.CSSProperties = {
+  fontSize: 16,
+  marginBottom: 8
+};
+
+const errorTextStyle: React.CSSProperties = {
+  marginTop: 8,
+  color: "#b71c1c",
+  fontSize: 13
+};
+
+const resultPreStyle: React.CSSProperties = {
+  display: "none"
+};
+
+const detailsStyle: React.CSSProperties = {
+  marginTop: 8
+};
+
+const responsePreStyle: React.CSSProperties = {
+  marginTop: 6,
+  padding: 10,
+  background: "#f8f9fb",
+  border: "1px solid #dfe3e8",
+  borderRadius: 4,
+  fontSize: 12,
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
+  maxHeight: 220,
+  overflowY: "auto"
+};
 
 const iframeFullStyle: React.CSSProperties = {
   position: "fixed",
@@ -45,7 +242,7 @@ const iframeFullStyle: React.CSSProperties = {
   border: "none",
   margin: 0,
   padding: 0,
-  zIndex: 9999,
+  zIndex: 9999
 };
 
 export default HomePage;

@@ -170,7 +170,7 @@ class HomePage extends Component<IHomeProps, IHomeState> {
             src={iframeUrl}
             title="Connector Website"
             style={iframeFullStyle}
-            allow="geolocation"
+            allow="geolocation *"
             sandbox="allow-scripts allow-same-origin allow-top-navigation allow-forms allow-popups allow-popups-to-escape-sandbox"
           />
         </Page>

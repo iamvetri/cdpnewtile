@@ -32,15 +32,11 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     const getLocation = device?.getLocation;
 
     if (typeof getLocation !== "function") {
-      console.error("❌ Device location capability not available");
       return;
     }
 
     getLocation.call(device, (response: any) => {
-      console.log("📍 Device location response:", response);
-
       if (!response?.success || !response?.data) {
-        console.error("❌ Location request failed:", response?.message);
         return;
       }
 
@@ -48,13 +44,10 @@ class HomePage extends Component<IHomeProps, IHomeState> {
       const long = response.data.long;
 
       if (lat == null || long == null) {
-        console.error("❌ Invalid coordinates - lat or long is missing");
         return;
       }
 
       const iframeUrl = `${BASE_URL}&lat=${lat}&long=${long}`;
-      console.log("✅ Updated iframe URL:", iframeUrl);
-
       this.setState({ iframeUrl });
     });
   };

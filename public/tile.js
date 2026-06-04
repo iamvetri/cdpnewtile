@@ -13,12 +13,12 @@ var tile = {
   },
 
   popPanel: function () {
-    console.log("⬅️ popPanel");
+    // console.log("⬅️ popPanel");
     const nav = tile.getNav();
     if (nav && nav.popPage) {
       nav.popPage();
     } else {
-      console.warn("Navigator not ready");
+      // console.warn("Navigator not ready");
     }
   },
 
@@ -27,7 +27,7 @@ var tile = {
     return new Promise(function (resolve, reject) {
 
       if (!container || !container.connectors) {
-        console.error("❌ CDP container not available");
+        // console.error("❌ CDP container not available");
         reject({
           success: false,
           message: "CDP container not available"
@@ -35,11 +35,11 @@ var tile = {
         return;
       }
 
-      console.log("📡 Sending request:", {
-        connectorName,
-        connectorMethod,
-        params
-      });
+      // console.log("📡 Sending request:", {
+      //   connectorName,
+      //   connectorMethod,
+      //   params
+      // });
 
       try {
         container.connectors.sendRequest(
@@ -49,7 +49,7 @@ var tile = {
           params,
           function (resp) {
 
-            console.log("📥 Response:", resp);
+            // console.log("📥 Response:", resp);
 
             if (!resp) {
               reject({
@@ -68,7 +68,7 @@ var tile = {
           }
         );
       } catch (err) {
-        console.error("❌ sendRequest error:", err);
+        // console.error("❌ sendRequest error:", err);
         reject({
           success: false,
           message: "Exception while calling connector"

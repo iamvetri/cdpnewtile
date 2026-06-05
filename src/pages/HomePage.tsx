@@ -3,7 +3,7 @@ import { Page } from "react-onsenui";
 
 import IBasePageStateModel from "../models/CDP/baseStates/IBasePageState.model";
 import IBasePropsModel from "../models/CDP/baseProps/IBaseProps.model";
-import { sendRequest } from "../services/container.svc";
+import container, { sendRequest } from "../services/container.svc";
 import LoadingScreen from "../components/LoadingScreen";
 
 export interface IHomeProps extends IBasePropsModel { }
@@ -134,22 +134,33 @@ class HomePage extends Component<IHomeProps, IHomeState> {
         "externalCallMethod",
         this.requestPayload
       );
-      const iframeUrl = this.extractIframeUrl(response);
+      const baseIframeUrl = this.extractIframeUrl(response);
       const connectorError = this.getConnectorErrorMessage(response);
       const isRequestFailed =
         response?.success === false || response?.response?.success === false;
 
-      this.setState({
-        isLoading: false,
-        connectorResponse: response,
-        iframeUrl,
-        errorMessage:
-          isRequestFailed
-            ? connectorError || "Connector request failed."
-            : !iframeUrl
-            ? "Request succeeded, but no iframe URL found in connector response."
-            : ""
-      });
+      if (isRequestFailed) {
+        this.setState({
+          isLoading: false,
+          connectorResponse: response,
+          iframeUrl: "",
+          errorMessage: connectorError || "Connector request failed."
+        });
+        return;
+      }
+
+      if (!baseIframeUrl) {
+        this.setState({
+          isLoading: false,
+          connectorResponse: response,
+          iframeUrl: "",
+          errorMessage: "Request succeeded, but no iframe URL found in connector response."
+        });
+        return;
+      }
+
+      // Fetch device location and append to URL
+      this.fetchDeviceLocationAndUpdateUrl(baseIframeUrl, response);
     } catch (error: any) {
       this.setState({
         isLoading: false,
@@ -158,6 +169,43 @@ class HomePage extends Component<IHomeProps, IHomeState> {
         iframeUrl: ""
       });
     }
+  };
+
+  fetchDeviceLocationAndUpdateUrl = (baseUrl: string, connectorResponse: any) => {
+    const device = container?.device;
+    const getLocation = device?.getLocation;
+
+    if (typeof getLocation !== "function") {
+      // If device location is not available, use base URL as is
+      this.setState({
+        isLoading: false,
+        connectorResponse: connectorResponse,
+        iframeUrl: baseUrl,
+        errorMessage: ""
+      });
+      return;
+    }
+
+    getLocation.call(device, (locationResponse: any) => {
+      let finalUrl = baseUrl;
+
+      if (locationResponse?.success && locationResponse?.data) {
+        const lat = locationResponse.data.lat;
+        const long = locationResponse.data.long;
+
+        if (lat != null && long != null) {
+          const separator = baseUrl.includes("?") ? "&" : "?";
+          finalUrl = `${baseUrl}${separator}lat=${lat}&long=${long}`;
+        }
+      }
+
+      this.setState({
+        isLoading: false,
+        connectorResponse: connectorResponse,
+        iframeUrl: finalUrl,
+        errorMessage: ""
+      });
+    });
   };
 
   render() {

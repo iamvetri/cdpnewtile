@@ -8,6 +8,6 @@
     }
   },
   "config": {
-    "loglevel": "INFO"
+    "loglevel": "OFF"
   }
 }

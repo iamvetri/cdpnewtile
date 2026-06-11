@@ -35,9 +35,40 @@ class App extends Component<any, any> {
     );
   }
 
+  navigationHooksApplied = false;
+
+  removePortalBackVisibleClass = () => {
+    try {
+      const selectors = [
+        '#navigation-container #tile-nav-container',
+        '#tile-nav-container',
+        '#content-tilehtml'
+      ];
+      // Since window.parent.document throws CORS, we try to use container.tile.navigation
+      // Wait, if it throws CORS, this document.querySelectorAll won't do anything because 
+      // the class is in the portal. But we leave it here just in case.
+      document.querySelectorAll(selectors.join(',')).forEach((element) => {
+        if (element.classList && element.classList.contains('backVisible')) {
+          element.classList.remove('backVisible');
+        }
+      });
+    } catch (e) {
+      console.warn('Failed to remove backVisible class', e);
+    }
+  };
+
   componentDidMount() {
-    // The navigator is rendered now Init the Tile by getting the TileConfig and any openData
-    // if this fails go to error page
+    // Attempt immediate removal
+    this.removePortalBackVisibleClass();
+
+    // Periodically try to remove it just in case
+    const interval = setInterval(() => {
+      this.removePortalBackVisibleClass();
+    }, 250);
+
+    // Failsafe to stop interval after 5 seconds
+    setTimeout(() => clearInterval(interval), 5000);
+
     const nav = this.navEl.current;
     if (nav) {
       this.waitForCDPGlobals()

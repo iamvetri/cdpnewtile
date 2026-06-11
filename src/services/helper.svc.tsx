@@ -205,20 +205,10 @@ export function ProcessMetaAction(
             })
           )
           .then(() => {
-            const clone = (navigator as any).clone;
-            if (openPageAction.pageTitle) {
-              container.tile.navigation.pushPanelWithTitle(
-                clone,
-                openPageAction.pageName,
-                openPageAction.pageTitle
-              );
-            } else {
-              if (container.tile.navigation.pushPanel) {
-                container.tile.navigation.pushPanel(clone, openPageAction.pageName);
-              } else {
-                container.tile.navigation.pushPanelWithTitle(clone, openPageAction.pageName, "");
-              }
-            }
+            // We intentionally DO NOT call container.tile.navigation.pushPanelWithTitle here.
+            // If we notify the portal, it increments its panel stack and automatically 
+            // adds the 'backVisible' class, which we want to avoid. Since our React app 
+            // handles its own internal navigation, the portal does not need to manage our back button.
             resolve();
           })
           .catch((err) => {

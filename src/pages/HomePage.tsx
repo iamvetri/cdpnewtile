@@ -12,6 +12,7 @@ export interface IHomeState extends IBasePageStateModel {
   errorMessage: string;
   iframeUrl: string;
   connectorResponse: any;
+  deviceCapabilities: any;
 }
 
 class HomePage extends Component<IHomeProps, IHomeState> {
@@ -27,11 +28,30 @@ class HomePage extends Component<IHomeProps, IHomeState> {
     isLoading: true,
     errorMessage: "",
     iframeUrl: "",
-    connectorResponse: null
+    connectorResponse: null,
+    deviceCapabilities: null
   };
 
   componentDidMount(): void {
     this.loadIframeFromConnector();
+
+    // Log device capabilities to console for debugging
+    try {
+      const device = container?.device;
+      const getCapabilities = device?.getCapabilities;
+
+      if (typeof getCapabilities === "function") {
+        getCapabilities.call(device, (capRes: any) => {
+          console.log("container.device.getCapabilities response:", capRes);
+          // Store capabilities in state to use later for conditional checks
+          this.setState({ deviceCapabilities: capRes });
+        });
+      } else {
+        console.log("container.device.getCapabilities not available", device);
+      }
+    } catch (err) {
+      console.log("Error calling container.device.getCapabilities:", err);
+    }
   }
 
   extractIframeUrl(response: any): string {
@@ -174,38 +194,43 @@ class HomePage extends Component<IHomeProps, IHomeState> {
   fetchDeviceLocationAndUpdateUrl = (baseUrl: string, connectorResponse: any) => {
     const device = container?.device;
     const getLocation = device?.getLocation;
+    const { deviceCapabilities } = this.state;
 
-    if (typeof getLocation !== "function") {
-      // If device location is not available, use base URL as is
+    // Check if location services are available in device capabilities
+    const hasLocationServices = deviceCapabilities?.locationservices?.hasItem === true;
+
+    // If location services ARE available AND getLocation is available, call getLocation
+    if (hasLocationServices && typeof getLocation === "function") {
+      getLocation.call(device, (locationResponse: any) => {
+        let finalUrl = baseUrl;
+
+        if (locationResponse?.success && locationResponse?.data) {
+          const lat = locationResponse.data.lat;
+          const long = locationResponse.data.long;
+
+          if (lat != null && long != null) {
+            const separator = baseUrl.includes("?") ? "&" : "?";
+            finalUrl = `${baseUrl}${separator}lat=${lat}&long=${long}`;
+          }
+        }
+
+        this.setState({
+          isLoading: false,
+          connectorResponse: connectorResponse,
+          iframeUrl: finalUrl,
+          errorMessage: ""
+        });
+      });
+    } else {
+      // Location services not available or not supported - use base URL
+      console.log("Location services not available or not supported. Using base URL.");
       this.setState({
         isLoading: false,
         connectorResponse: connectorResponse,
         iframeUrl: baseUrl,
         errorMessage: ""
       });
-      return;
     }
-
-    getLocation.call(device, (locationResponse: any) => {
-      let finalUrl = baseUrl;
-
-      if (locationResponse?.success && locationResponse?.data) {
-        const lat = locationResponse.data.lat;
-        const long = locationResponse.data.long;
-
-        if (lat != null && long != null) {
-          const separator = baseUrl.includes("?") ? "&" : "?";
-          finalUrl = `${baseUrl}${separator}lat=${lat}&long=${long}`;
-        }
-      }
-
-      this.setState({
-        isLoading: false,
-        connectorResponse: connectorResponse,
-        iframeUrl: finalUrl,
-        errorMessage: ""
-      });
-    });
   };
 
   render() {
